@@ -7,6 +7,7 @@ import { APP_VERSION, BUILD_TIME } from "../lib/buildInfo";
 import { applyStagedUpdate, getUpdaterDiagnostics, installedNativeBuild, isNative, type UpdateResult, type UpdaterDiagnostics } from "../lib/otaUpdater";
 import { runUpdateCheck } from "../lib/updateFlow";
 import { useBackend, useRequiredBackend } from "../context/BackendProvider";
+import { useConfirm } from "../components/ConfirmDialog";
 import { startGoogleSignIn } from "../lib/backend/googleAuth";
 import type { ImportData } from "../lib/backend/types";
 import { useTheme, type Theme } from "../context/ThemeProvider";
@@ -18,6 +19,7 @@ import { ReminderSettings } from "../components/ReminderSettings";
 import { useActiveProgram } from "../hooks/useData";
 
 export function Settings() {
+  const confirm = useConfirm();
   const { ownerLabel, mode, accountsEnabled, guestBackend, signOut, deleteAccount } = useBackend();
   const backend = useRequiredBackend();
   const { theme, setTheme } = useTheme();
@@ -213,14 +215,29 @@ export function Settings() {
             </button>
           )}
           {mode === "account" && (
-            <button className="btn-ghost" onClick={() => signOut().then(() => navigate("/login"))}>
+            <button
+              className="btn-ghost"
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "Sign out?",
+                  message: "Your workouts stay safe in your Google Drive. Sign in again any time to pick up where you left off.",
+                  confirmLabel: "Sign out",
+                });
+                if (ok) await signOut().then(() => navigate("/login"));
+              }}
+            >
               Sign out
             </button>
           )}
           <button
             className="btn-danger"
             onClick={async () => {
-              if (!confirm(mode === "guest" ? "Erase every workout on this device?" : "Delete your Ironward data from your Google Drive? It moves to the Drive trash for 30 days.")) return;
+              const ok = await confirm(
+                mode === "guest"
+                  ? { title: "Erase all data?", message: "Every workout, plan and log on this device will be deleted. This can't be undone.", confirmLabel: "Erase everything", tone: "danger" }
+                  : { title: "Delete your data?", message: "Your Ironward folder moves to the Google Drive trash (recoverable there for 30 days), and Ironward's access to your Google account is removed.", confirmLabel: "Delete my data", tone: "danger" },
+              );
+              if (!ok) return;
               await deleteAccount();
               navigate("/login");
             }}

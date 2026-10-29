@@ -1,3 +1,4 @@
+import { useConfirm } from "../components/ConfirmDialog";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { WorkoutEditor } from "../components/WorkoutEditor";
@@ -9,6 +10,7 @@ import type { Workout } from "../lib/types";
 import { toUnit } from "../lib/units";
 
 export function WorkoutDetail() {
+  const confirm = useConfirm();
   const { id } = useParams();
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -45,7 +47,7 @@ export function WorkoutDetail() {
   }
 
   async function del() {
-    if (!workout || !confirm("Delete this workout for good?")) return;
+    if (!workout || !(await confirm({ title: "Delete this workout?", message: "It will be gone for good, along with its sets and PRs.", confirmLabel: "Delete", tone: "danger" }))) return;
     await remove.mutateAsync(workout.id);
     navigate("/history", { replace: true });
   }

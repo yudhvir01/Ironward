@@ -1,9 +1,11 @@
+import { useConfirm } from "../components/ConfirmDialog";
 import { Link, useNavigate } from "react-router-dom";
 import { PageHeader } from "../components/AppShell";
 import { useActiveProgram, useDeletePlan } from "../hooks/useData";
 import { PROGRAMS, type Program } from "../lib/program";
 
 export function Plans() {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const { program: active, plans, setActive } = useActiveProgram();
   const remove = useDeletePlan();
@@ -37,7 +39,7 @@ export function Plans() {
                     </Link>
                     <button
                       className="text-xs font-bold text-destructive"
-                      onClick={() => confirm(`Delete “${p.name}”? Workouts you logged with it stay.`) && remove.mutate(p.id)}
+                      onClick={async () => (await confirm({ title: `Delete “${p.name}”?`, message: "Workouts you logged with it stay.", confirmLabel: "Delete plan", tone: "danger" })) && remove.mutate(p.id)}
                     >
                       Delete
                     </button>

@@ -1,3 +1,4 @@
+import { useConfirm } from "../components/ConfirmDialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { WarmupSection } from "../components/WarmupSection";
@@ -11,6 +12,7 @@ import { lastPerformance, workoutSetCount } from "../lib/stats";
 import type { Workout } from "../lib/types";
 
 export function WorkoutPage() {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [workout, setWorkout] = useState<Workout | null>(() => loadDraft());
   const { data: history = [] } = useWorkouts();
@@ -52,7 +54,7 @@ export function WorkoutPage() {
   async function finish() {
     if (!workout) return;
     if (workoutSetCount(workout) === 0) {
-      if (confirm("No sets ticked yet. Discard this workout?")) discard();
+      if (await confirm({ title: "Discard this workout?", message: "No sets are ticked yet, so there is nothing to save.", confirmLabel: "Discard", cancelLabel: "Keep going", tone: "danger" })) discard();
       return;
     }
     // Unticked sets are dropped; empty exercises too. A note left over
@@ -132,7 +134,7 @@ export function WorkoutPage() {
           value={workout.note ?? ""}
           onChange={(e) => change({ ...workout, note: e.target.value || null })}
         />
-        <button className="w-full py-3 text-sm font-semibold text-destructive" onClick={() => confirm("Discard this workout?") && discard()}>
+        <button className="w-full py-3 text-sm font-semibold text-destructive" onClick={async () => (await confirm({ title: "Discard this workout?", message: "Everything logged in this session will be thrown away.", confirmLabel: "Discard", cancelLabel: "Keep going", tone: "danger" })) && discard()}>
           Discard workout
         </button>
       </main>

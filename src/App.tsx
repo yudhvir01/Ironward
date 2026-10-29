@@ -11,6 +11,7 @@ import { AppShell } from "./components/AppShell";
 import { AppUpdater } from "./components/AppUpdater";
 import { GoogleCallback } from "./pages/GoogleCallback";
 import { NativeAppLifecycle } from "./components/NativeAppLifecycle";
+import { ConfirmProvider } from "./components/ConfirmDialog";
 import { Login } from "./pages/Login";
 import { Today } from "./pages/Today";
 import { WorkoutPage } from "./pages/Workout";
@@ -69,6 +70,7 @@ export default function App() {
     >
       <ThemeProvider>
         <BackendProvider>
+          <ConfirmProvider>
           <BrowserRouter>
             <AppUpdater />
             <NativeAppLifecycle />
@@ -100,6 +102,7 @@ export default function App() {
               </Routes>
             </Suspense>
           </BrowserRouter>
+          </ConfirmProvider>
         </BackendProvider>
       </ThemeProvider>
     </PersistQueryClientProvider>

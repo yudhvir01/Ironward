@@ -1,3 +1,4 @@
+import { useConfirm } from "../components/ConfirmDialog";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { IronwardMark } from "../components/Logo";
@@ -24,6 +25,7 @@ import {
 } from "../lib/stats";
 
 export function Today() {
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const { data: workouts = [], isLoading } = useWorkouts();
   const { program } = useActiveProgram();
@@ -51,8 +53,8 @@ export function Today() {
   const muscles = [...new Set(day.exercises.map((p) => (swaps[p.exerciseId] ?? defFor(p)).primary))];
   const totalSets = day.exercises.reduce((n, p) => n + p.sets, 0);
 
-  function start(d: PlanDay | null) {
-    if (draft && !confirm("You have a workout in progress. Throw it away and start a new one?")) return;
+  async function start(d: PlanDay | null) {
+    if (draft && !(await confirm({ title: "Start a new workout?", message: "You have a workout in progress. Starting a new one throws it away.", confirmLabel: "Start new", cancelLabel: "Keep it", tone: "danger" }))) return;
     const o = d ? loadOverrides(program.id, d.key) : null;
     const w = startWorkout(d ? program : null, d, { swaps: o?.swaps, supersets: o?.supersets, deload: deloadActive() });
     // Muscle corrections made in How-to apply to every later session.

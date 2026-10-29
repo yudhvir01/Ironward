@@ -1,3 +1,4 @@
+import { useConfirm } from "./ConfirmDialog";
 import { useEffect, useMemo, useState } from "react";
 import { addPhoto, deletePhoto, listPhotos, type Photo } from "../lib/photos";
 import { fmtDay, localDay } from "../lib/stats";
@@ -5,6 +6,7 @@ import { fmtDay, localDay } from "../lib/stats";
 // Progress photos: kept only on this phone, never uploaded. The first and
 // latest sit side by side, which is the comparison that matters.
 export function PhotosCard() {
+  const confirm = useConfirm();
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [busy, setBusy] = useState(false);
   const reload = () => void listPhotos().then(setPhotos).catch(() => setPhotos([]));
@@ -46,7 +48,7 @@ export function PhotosCard() {
             <button
               key={p.id}
               className="relative shrink-0"
-              onClick={() => confirm(`Delete the photo from ${fmtDay(p.day)}?`) && void deletePhoto(p.id).then(reload)}
+              onClick={async () => (await confirm({ title: "Delete this photo?", message: `The progress photo from ${fmtDay(p.day)} will be removed from this device.`, confirmLabel: "Delete", tone: "danger" })) && void deletePhoto(p.id).then(reload)}
               aria-label={`Delete photo from ${fmtDay(p.day)}`}
             >
               <img src={urls.get(p.id)} alt="" className="h-16 w-12 rounded-lg object-cover" />
@@ -73,7 +75,7 @@ export function PhotosCard() {
         />
       </label>
       {photos.length === 2 && (
-        <button className="mt-2 w-full text-xs text-muted-foreground" onClick={() => latest && confirm("Delete the latest photo?") && void deletePhoto(latest.id).then(reload)}>
+        <button className="mt-2 w-full text-xs text-muted-foreground" onClick={async () => latest && (await confirm({ title: "Delete the latest photo?", message: "It will be removed from this device.", confirmLabel: "Delete", tone: "danger" })) && void deletePhoto(latest.id).then(reload)}>
           Delete latest
         </button>
       )}
