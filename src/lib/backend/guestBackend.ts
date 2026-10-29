@@ -1,7 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { Program } from "../program";
 import type { BodyWeight, DailyLog, LogKind, Workout } from "../types";
-import type { Backend } from "./types";
+import type { Backend, ImportData } from "./types";
 
 interface GuestDB extends DBSchema {
   workouts: { key: string; value: Workout };
@@ -97,6 +97,24 @@ export class GuestBackend implements Backend {
 
   async deletePlan(id: string): Promise<void> {
     await (await getGuestDB()).delete("plans", id);
+  }
+
+  async importAll(data: ImportData): Promise<void> {
+    const db = await getGuestDB();
+    const tx = db.transaction(["workouts", "bodyweights", "plans", "logs"], "readwrite");
+    await Promise.all([
+      ...(data.workouts ?? []).map((r) => tx.objectStore("workouts").put(r)),
+      ...(data.bodyweights ?? []).map((r) => tx.objectStore("bodyweights").put(r)),
+      ...(data.plans ?? []).map((r) => tx.objectStore("plans").put(r)),
+      ...(data.logs ?? []).map((r) => tx.objectStore("logs").put(r)),
+      tx.done,
+    ]);
+  }
+
+  // Everything stored on this device, for moving it into a Google account.
+  async exportAll(): Promise<Required<ImportData>> {
+    const [workouts, bodyweights, plans, logs] = await Promise.all([this.listWorkouts(), this.listBodyWeights(), this.listPlans(), this.listLogs()]);
+    return { workouts, bodyweights, plans, logs };
   }
 
   async deleteAccount(): Promise<void> {

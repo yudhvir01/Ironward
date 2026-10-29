@@ -8,9 +8,11 @@ const SCOPES = "https://www.googleapis.com/auth/drive.file email profile openid"
 
 const STATE_KEY = "ironward.googleOAuthState";
 
-// sessionStorage keeps simultaneous tabs isolated.
+// localStorage, not sessionStorage: an installed (home-screen) web app can
+// hand the Google round trip to a browser tab, and the state must still be
+// readable when the redirect lands there.
 function oauthStorage(): Storage {
-  return sessionStorage;
+  return localStorage;
 }
 
 export function googleRedirectUri(): string {
@@ -60,23 +62,44 @@ interface RelayTokenResponse {
   scope?: string;
 }
 
+class RelayError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
 interface RelayErrorResponse {
   error: string;
   error_description?: string;
   message?: string;
 }
 
+// The saved sign-in no longer works (refresh token expired or access was
+// revoked). Signing in again is the only fix, so the app listens for this
+// and sends the person back to the login screen.
+export const SESSION_EXPIRED_EVENT = "ironward-google-session-expired";
+
+export class SessionExpiredError extends Error {
+  constructor() {
+    super("Your Google sign-in has expired. Please sign in again.");
+  }
+}
+
 async function callRelay(body: object): Promise<RelayTokenResponse> {
-  if (!GOOGLE_TOKEN_RELAY_URL) throw new Error("Google sign-in is not configured.");
   const res = await fetch(GOOGLE_TOKEN_RELAY_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = (await res.json()) as RelayTokenResponse | RelayErrorResponse;
+  const data = (await res.json().catch(() => ({ error: "relay_unavailable", message: "Google sign-in is unavailable right now. Try again shortly." }))) as
+    | RelayTokenResponse
+    | RelayErrorResponse;
   if (!res.ok) {
     const err = data as RelayErrorResponse;
-    throw new Error(err.error_description || err.message || err.error || "Google sign-in failed.");
+    throw new RelayError(err.error, err.error_description || err.message || err.error || "Google sign-in failed.");
   }
   return data as RelayTokenResponse;
 }
@@ -142,11 +165,25 @@ export class GoogleDriveSession {
     this.accessTokenExpiresAt = accessToken ? Date.now() + expiresInSeconds * 1000 : 0;
   }
 
+  forgetAccessToken(): void {
+    this.accessToken = null;
+  }
+
   async getAccessToken(): Promise<string> {
     if (this.accessToken && Date.now() < this.accessTokenExpiresAt - EXPIRY_SAFETY_MARGIN_MS) {
       return this.accessToken;
     }
-    const tokens = await callRelay({ grant_type: "refresh_token", refresh_token: this.refreshToken });
+    let tokens: RelayTokenResponse;
+    try {
+      tokens = await callRelay({ grant_type: "refresh_token", refresh_token: this.refreshToken });
+    } catch (e) {
+      if (e instanceof RelayError && e.code === "invalid_grant") {
+        await clearDriveSession().catch(() => undefined);
+        window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+        throw new SessionExpiredError();
+      }
+      throw e;
+    }
     this.accessToken = tokens.access_token;
     this.accessTokenExpiresAt = Date.now() + tokens.expires_in * 1000;
     return this.accessToken;

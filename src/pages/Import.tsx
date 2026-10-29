@@ -37,10 +37,10 @@ export function Import() {
     if (!preview) return;
     setError(null);
     try {
-      for (let i = 0; i < preview.workouts.length; i++) {
-        await backend.saveWorkout(preview.workouts[i]);
-        setProgress(i + 1);
-      }
+      setProgress(0);
+      // One write for the whole history (on Drive, one upload).
+      await backend.importAll({ workouts: preview.workouts });
+      setProgress(preview.workouts.length);
       await qc.invalidateQueries({ queryKey: ["workouts"] });
       navigate("/history", { replace: true });
     } catch (e) {

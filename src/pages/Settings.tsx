@@ -1,10 +1,12 @@
 import { useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "../components/AppShell";
 import { APP_NAME } from "../lib/brand";
 import { APP_VERSION } from "../lib/buildInfo";
 import { useBackend, useRequiredBackend } from "../context/BackendProvider";
+import { startGoogleSignIn } from "../lib/backend/googleAuth";
+import type { ImportData } from "../lib/backend/types";
 import { useTheme, type Theme } from "../context/ThemeProvider";
 import { useBodyWeights, useLogs, useWorkouts } from "../hooks/useData";
 import { exportBackup, exportCsv, parseBackup } from "../lib/exportData";
@@ -29,19 +31,17 @@ export function Settings() {
   const [stepKg, setStepKg] = useState(loadStepKg());
   // Smallest jumps on offer, in the unit shown (stored as kg).
   const steps = unit === "kg" ? [1, 1.25, 2, 2.5, 5].map((v) => ({ label: `${v} kg`, kg: v })) : [2.5, 5, 10].map((v) => ({ label: `${v} lb`, kg: Math.round(v * 0.45359237 * 1000) / 1000 }));
-  const [message, setMessage] = useState<string | null>(null);
+  const migrationFailed = Boolean((useLocation().state as { migrationFailed?: boolean } | null)?.migrationFailed);
+  const [message, setMessage] = useState<string | null>(
+    migrationFailed ? "Signed in, but your workouts on this device couldn't be moved to Drive yet. They're safe here — tap the button below to try again." : null,
+  );
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Adds rows (same ids replace, so importing twice doesn't duplicate).
-  async function importRows(source: { workouts: typeof workouts; bodyweights: typeof weights; plans?: typeof plans; logs?: typeof logs }) {
-    for (const w of source.workouts) await backend.saveWorkout(w);
-    for (const p of source.plans ?? []) await backend.savePlan(p);
-    const haveLogs = new Set(logs.map((l) => `${l.day}:${l.kind}:${l.value}:${l.created_at}`));
-    for (const l of source.logs ?? []) if (!haveLogs.has(`${l.day}:${l.kind}:${l.value}:${l.created_at}`)) await backend.addLog({ day: l.day, kind: l.kind, value: l.value });
-    const existing = new Set(weights.map((w) => `${w.day}:${w.kg}`));
-    for (const b of source.bodyweights) if (!existing.has(`${b.day}:${b.kg}`)) await backend.addBodyWeight({ day: b.day, kg: b.kg });
+  async function importRows(source: ImportData) {
+    await backend.importAll(source);
     await qc.invalidateQueries();
-    setMessage(`Imported ${source.workouts.length} workouts and ${source.bodyweights.length} weigh-ins.`);
+    setMessage(`Imported ${source.workouts?.length ?? 0} workouts and ${source.bodyweights?.length ?? 0} weigh-ins.`);
   }
 
   async function restore(file: File) {
@@ -52,10 +52,17 @@ export function Settings() {
     }
   }
 
+  // Normally done automatically right after signing in; this is the retry
+  // for when that couldn't finish.
   async function moveGuestData() {
-    const [gw, gb, gp, gl] = await Promise.all([guestBackend.listWorkouts(), guestBackend.listBodyWeights(), guestBackend.listPlans(), guestBackend.listLogs()]);
-    if (!gw.length && !gb.length && !gp.length && !gl.length) return setMessage("There's nothing saved on this device without an account.");
-    await importRows({ workouts: gw, bodyweights: gb, plans: gp, logs: gl });
+    try {
+      const guest = await guestBackend.exportAll();
+      if (!guest.workouts.length && !guest.bodyweights.length && !guest.plans.length && !guest.logs.length) return setMessage("Nothing left on this device to move.");
+      await importRows(guest);
+      await guestBackend.deleteAccount();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Couldn't move them. Check your connection and try again.");
+    }
   }
 
   return (
@@ -176,9 +183,9 @@ export function Settings() {
           <Link to="/import" className="btn-ghost col-span-2">
             Import from Strong or Hevy
           </Link>
-          {mode === "account" && (
-            <button className="btn-ghost col-span-2" onClick={moveGuestData}>
-              Bring in workouts logged on this device without an account
+          {mode === "account" && migrationFailed && (
+            <button className="btn-primary col-span-2" onClick={moveGuestData}>
+              Move this device's workouts to Drive
             </button>
           )}
         </div>
@@ -208,7 +215,7 @@ export function Settings() {
         )}
         <div className="mt-3 flex flex-col gap-2">
           {mode === "guest" && accountsEnabled && (
-            <button className="btn-primary" onClick={() => signOut().then(() => navigate("/login"))}>
+            <button className="btn-primary" onClick={() => startGoogleSignIn()}>
               Sign in with Google
             </button>
           )}

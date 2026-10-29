@@ -7,7 +7,7 @@ import { IronwardMark } from "../components/Logo";
 import { APP_MOTTO, APP_NAME, APP_TAGLINE } from "../lib/brand";
 
 export function Login() {
-  const { backend, accountsEnabled, chooseGuest } = useBackend();
+  const { backend, mode, accountsEnabled, chooseGuest } = useBackend();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
@@ -17,8 +17,7 @@ export function Login() {
   }, [backend, navigate]);
   if (backend) return <Navigate to="/" replace />;
 
-  // Web only: the native apps would need a deep link back from the browser.
-  const googleEnabled = accountsEnabled && !Capacitor.isNativePlatform();
+  const googleEnabled = accountsEnabled;
 
   function google() {
     setError(null);
@@ -58,6 +57,7 @@ export function Login() {
             <GoogleMark /> Continue with Google
           </button>
         )}
+        {mode === "account" && !error && <p className="text-center text-sm text-primary">Your Google sign-in expired. Sign in again to pick up where you left off.</p>}
         {error && <p className="text-sm text-destructive">{error}</p>}
         <button
           className={`${googleEnabled ? "btn-ghost" : "btn-primary"} w-full py-4 text-base`}

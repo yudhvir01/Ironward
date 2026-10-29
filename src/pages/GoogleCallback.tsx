@@ -1,55 +1,68 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { IronwardMark } from "../components/Logo";
 import { useBackend } from "../context/BackendProvider";
+import { DriveBackend } from "../lib/backend/driveBackend";
 import { completeGoogleSignIn, consumeGoogleOAuthState } from "../lib/backend/googleAuth";
 
-// Where Google sends the browser back to after the consent screen (see
-// googleRedirectUri() — this path has to match what's registered as an
-// Authorized redirect URI in the Google Cloud console exactly). Renders
-// no real UI of its own: it exists to pull the `code` off the URL before
-// anything else touches it, trade it for a session, and get out of the
-// way — the code is only valid once, and browser back/refresh in the
-// meantime would otherwise try to redeem it a second time.
+// Where Google sends the browser back to after the consent screen. The
+// path must match an Authorized redirect URI in the Google Cloud console
+// exactly. It trades the one-time `code` for a session, then moves anything
+// logged as a guest on this device into the account, so signing in never
+// strands workouts on the device.
 export function GoogleCallback() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const { completeGoogleSignIn: adoptSession } = useBackend();
+  const { completeGoogleSignIn: adoptSession, guestBackend } = useBackend();
+  const [status, setStatus] = useState("Signing you in…");
   const [error, setError] = useState<string | null>(null);
+  // The code can be redeemed once; StrictMode's second effect run must not
+  // try again.
+  const started = useRef(false);
 
   useEffect(() => {
+    if (started.current) return;
+    started.current = true;
+
     const oauthError = params.get("error");
     if (oauthError) {
-      setError(
-        oauthError === "access_denied"
-          ? "Sign-in was cancelled."
-          : `Google returned an error: ${oauthError}`,
-      );
+      setError(oauthError === "access_denied" ? "Sign-in was cancelled." : `Google returned an error: ${oauthError}`);
       return;
     }
-
     const code = params.get("code");
     if (!code || !consumeGoogleOAuthState(params.get("state"))) {
       setError("Couldn't verify this sign-in request — please try again.");
       return;
     }
 
-    let cancelled = false;
-    completeGoogleSignIn(code)
-      .then((session) => {
-        if (cancelled) return;
+    void (async () => {
+      let session;
+      try {
+        session = await completeGoogleSignIn(code);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Google sign-in failed.");
+        return;
+      }
+      try {
+        const guest = await guestBackend.exportAll();
+        if (guest.workouts.length || guest.bodyweights.length || guest.plans.length || guest.logs.length) {
+          setStatus("Moving your workouts to Google Drive…");
+          await new DriveBackend(session).importAll(guest);
+          // Only once Drive has it: the device copy is no longer needed,
+          // and keeping it would make it look like separate data.
+          await guestBackend.deleteAccount();
+        }
+      } catch {
+        // Signed in either way. The guest data is still on the device, and
+        // the next sign-in (or Settings) tries the move again.
         adoptSession(session);
-        navigate("/", { replace: true });
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-          setError(err instanceof Error ? err.message : "Google sign-in failed.");
-      });
-    return () => {
-      cancelled = true;
-    };
-    // Runs once against whatever the URL had on arrival — re-running this
-    // on param changes would try to redeem the same one-time code again.
+        navigate("/settings", { replace: true, state: { migrationFailed: true } });
+        return;
+      }
+      adoptSession(session);
+      navigate("/", { replace: true });
+    })();
+    // Runs once against the URL as it arrived.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -58,14 +71,14 @@ export function GoogleCallback() {
       <IronwardMark size={40} className="mb-8 rounded-xl" />
       {error ? (
         <>
-          <h1 className="text-2xl font-semibold">Couldn't sign you in</h1>
+          <h1 className="font-display text-2xl font-black">Couldn't sign you in</h1>
           <p className="mt-2 text-sm text-destructive">{error}</p>
-          <Link to="/login" className="mt-6 text-sm text-primary hover:underline">
-            ← Back to login
+          <Link to="/login" className="mt-6 text-sm font-semibold text-primary">
+            ← Back to sign in
           </Link>
         </>
       ) : (
-        <p className="text-sm text-muted-foreground">Signing you in…</p>
+        <p className="text-sm text-muted-foreground">{status}</p>
       )}
     </div>
   );

@@ -12,6 +12,13 @@ export interface Backup {
   logs?: DailyLog[];
 }
 
+export interface ImportData {
+  workouts?: Workout[];
+  bodyweights?: BodyWeight[];
+  plans?: Program[];
+  logs?: DailyLog[];
+}
+
 // The one seam every page and hook talks through. Pages never touch
 // Drive or IndexedDB directly. A gym log is small (a few hundred
 // workouts a year), so reports are computed client-side from the full
@@ -40,6 +47,11 @@ export interface Backend {
   listPlans(): Promise<Program[]>;
   savePlan(plan: Program): Promise<void>;
   deletePlan(id: string): Promise<void>;
+
+  // Merges a whole dataset in one go (restore, Strong/Hevy import, moving
+  // guest data into an account). Rows with an id already present replace
+  // it, so importing the same data twice doesn't duplicate anything.
+  importAll(data: ImportData): Promise<void>;
 
   // Removes everything this account stores (and the account itself, where
   // there is one). Signing out afterwards is the caller's job.

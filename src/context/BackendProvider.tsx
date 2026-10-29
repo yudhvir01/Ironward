@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { GOOGLE_SIGNIN_ENABLED } from "../lib/env";
 import { GuestBackend, requestPersistentGuestStorage } from "../lib/backend/guestBackend";
 import { DriveBackend } from "../lib/backend/driveBackend";
-import { restoreGoogleSignIn, signOutOfGoogle, type GoogleDriveSession } from "../lib/backend/googleAuth";
+import { restoreGoogleSignIn, SESSION_EXPIRED_EVENT, signOutOfGoogle, type GoogleDriveSession } from "../lib/backend/googleAuth";
 import type { Backend } from "../lib/backend/types";
 
 type Mode = "guest" | "account";
@@ -59,6 +59,19 @@ export function BackendProvider({ children }: { children: ReactNode }) {
     // Only on first load; a later sign-in sets the session itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A refresh token that stops working (expired, or access revoked in the
+  // Google account) can't be repaired here: drop the session and let the
+  // route guard send the person to sign in again. Guest data and workouts
+  // waiting to sync are left untouched.
+  useEffect(() => {
+    function expired() {
+      setSession(null);
+      queryClient.clear();
+    }
+    window.addEventListener(SESSION_EXPIRED_EVENT, expired);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, expired);
+  }, [queryClient]);
 
   const backend: Backend | null = useMemo(() => {
     if (mode === "guest") return guestBackend;

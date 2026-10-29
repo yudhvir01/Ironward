@@ -16,7 +16,7 @@ export class DriveConflictError extends Error {
   }
 }
 
-class DriveRequestError extends Error {
+export class DriveRequestError extends Error {
   readonly status: number;
 
   constructor(status: number, body: string) {
@@ -26,11 +26,15 @@ class DriveRequestError extends Error {
 }
 
 async function driveFetch(session: GoogleDriveSession, url: string, init: RequestInit = {}): Promise<Response> {
-  const token = await session.getAccessToken();
-  const res = await fetch(url, {
-    ...init,
-    headers: { ...init.headers, Authorization: `Bearer ${token}` },
-  });
+  const send = async () =>
+    fetch(url, { ...init, headers: { ...init.headers, Authorization: `Bearer ${await session.getAccessToken()}` } });
+  let res = await send();
+  // An access token can be rejected before its stated expiry (revoked,
+  // clock skew). One retry with a freshly minted token covers that.
+  if (res.status === 401) {
+    session.forgetAccessToken();
+    res = await send();
+  }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new DriveRequestError(res.status, body);
@@ -133,6 +137,11 @@ export async function trashFile(session: GoogleDriveSession, fileId: string): Pr
   }
 }
 
+export async function getHeadRevision(session: GoogleDriveSession, fileId: string): Promise<string | undefined> {
+  const res = await driveFetch(session, `${DRIVE_API}/${fileId}?fields=headRevisionId`);
+  return ((await res.json()) as { headRevisionId?: string }).headRevisionId;
+}
+
 // Overwrites the data file's content. `expectedRevisionId` is the
 // revision this write's caller last read — if the file has moved on
 // since (another tab or device saved), the update is rejected with
@@ -143,12 +152,8 @@ export async function saveDataFile(
   content: string,
   expectedRevisionId: string | undefined,
 ): Promise<DriveDataFile> {
-  if (expectedRevisionId) {
-    const current = await driveFetch(session, `${DRIVE_API}/${fileId}?fields=headRevisionId`);
-    const { headRevisionId } = (await current.json()) as { headRevisionId?: string };
-    if (headRevisionId !== expectedRevisionId) {
-      throw new DriveConflictError();
-    }
+  if (expectedRevisionId && (await getHeadRevision(session, fileId)) !== expectedRevisionId) {
+    throw new DriveConflictError();
   }
 
   const res = await driveFetch(

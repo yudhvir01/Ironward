@@ -44,7 +44,7 @@ export default defineConfig(({ mode }) => ({
       workbox: {
         // The APK and OTA zips are downloads, not app shell.
         globIgnores: ['downloads/**', 'updates/**'],
-        navigateFallbackDenylist: [/^\/downloads\//, /^\/updates\//],
+        navigateFallbackDenylist: [/^\/downloads\//, /^\/updates\//, /^\/api\//],
         // Exercise demo photos (~3 MB in all) aren't precached; each one is
         // kept after its first view so it works with no signal at the gym.
         runtimeCaching: [
