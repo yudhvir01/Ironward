@@ -1,21 +1,21 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "../components/AppShell";
 import { AiReviewCard } from "../components/AiReviewCard";
 import { RecapCard } from "../components/RecapCard";
 import { MeasurementsCard } from "../components/MeasurementsCard";
 import { PhotosCard } from "../components/PhotosCard";
+import { BodyWeightCard } from "../components/BodyWeight";
 import { BodyMap } from "../components/BodyMap";
-import { fromUnit, getUnit, toUnit } from "../lib/units";
+import { toUnit } from "../lib/units";
 import { BarRow, LineChart } from "../components/Charts";
-import { useAddBodyWeight, useBodyWeights, useDeleteBodyWeight, useWorkouts } from "../hooks/useData";
+import { useWorkouts } from "../hooks/useData";
 import { MUSCLE_LABEL, MUSCLES } from "../lib/program";
 import {
   exerciseHistory,
   fmtDay,
   fmtKg,
   fmtVolume,
-  localDay,
   loggedExercises,
   muscleSets,
   round1,
@@ -220,71 +220,6 @@ function Stalled() {
           <li key={s.id}>{s.name}</li>
         ))}
       </ul>
-    </section>
-  );
-}
-
-function BodyWeightCard() {
-  const { data: weights = [] } = useBodyWeights();
-  const add = useAddBodyWeight();
-  const remove = useDeleteBodyWeight();
-  const [value, setValue] = useState("");
-  const unit = getUnit();
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    const v = Number(value.replace(",", "."));
-    if (!v || v <= 0) return;
-    await add.mutateAsync({ day: localDay(), kg: round1(fromUnit(v)) });
-    setValue("");
-  }
-
-  const chrono = [...weights].reverse();
-  const latest = weights[0];
-  const monthAgo = weights.find((w) => Date.parse(w.day) <= Date.now() - 28 * 86400000);
-  const delta = latest && monthAgo ? latest.kg - monthAgo.kg : null;
-
-  return (
-    <section className="card p-4">
-      <p className="label">Body weight</p>
-      {latest && (
-        <p className="font-display mt-1 text-3xl font-black tabular-nums">
-          {fmtKg(latest.kg)}
-          {delta !== null && (
-            <span className="ml-2 font-sans text-sm font-semibold text-muted-foreground">
-              {delta >= 0 ? "+" : "−"}
-              {fmtKg(Math.abs(delta))} in 4 weeks
-            </span>
-          )}
-        </p>
-      )}
-      <form onSubmit={submit} className="mt-3 flex gap-2">
-        <input className="field" type="number" inputMode="decimal" step="0.1" placeholder={`Today's weight (${unit})`} value={value} onChange={(e) => setValue(e.target.value)} />
-        <button className="btn-primary shrink-0" disabled={add.isPending || !value}>
-          Log
-        </button>
-      </form>
-      {chrono.length > 1 && (
-        <div className="mt-3">
-          <LineChart points={chrono.map((w) => ({ label: fmtDay(w.day, { day: "numeric", month: "short" }), value: toUnit(w.kg) }))} format={(v) => `${round1(v)}`} height={110} />
-        </div>
-      )}
-      <p className="mt-2 text-xs text-muted-foreground">Weigh in the morning a few times a week. For muscle gain, a slow climb (~0.25–0.5% a week) is the goal.</p>
-      {weights.length > 0 && (
-        <ul className="mt-2 divide-y divide-border text-sm">
-          {weights.slice(0, 4).map((w) => (
-            <li key={w.id} className="flex items-center justify-between py-2">
-              <span className="text-muted-foreground">{fmtDay(w.day)}</span>
-              <span className="flex items-center gap-3">
-                <b className="tabular-nums">{fmtKg(w.kg)}</b>
-                <button className="text-xs text-muted-foreground" onClick={() => remove.mutate(w.id)} aria-label="Delete entry">
-                  ✕
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
     </section>
   );
 }

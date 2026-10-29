@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { IronwardMark } from "../components/Logo";
 import { MuscleMap } from "../components/MuscleMap";
 import { PendingSyncNote } from "../components/OutboxSync";
-import { ProteinCard } from "../components/ProteinCard";
+import { WeighInCard } from "../components/BodyWeight";
 import { WeekStrip } from "../components/WeekStrip";
 import { useActiveProgram, useWorkouts } from "../hooks/useData";
 import { deloadActive, endDeload, isOnboarded, loadDraft, loadMuscleFix, loadOverrides, saveDraft, setOnboarded, startDeload } from "../lib/local";
@@ -188,7 +188,7 @@ export function Today() {
         )
       )}
 
-      <ProteinCard />
+      <WeighInCard />
 
       {phase && (
         <section className="card animate-in flex gap-4 p-4">

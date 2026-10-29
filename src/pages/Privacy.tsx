@@ -14,7 +14,7 @@ export function Privacy() {
         [
           "What we store",
           <p key="a">
-            Your workouts, plans, body weight, measurements and protein logs. {APP_NAME} has no server-side database: without an account everything stays in your browser or phone, and with Google sign-in it is saved in your own Google Drive. It never reaches us.
+            Your workouts, plans, body weight and measurements. {APP_NAME} has no server-side database: without an account everything stays in your browser or phone, and with Google sign-in it is saved in your own Google Drive. It never reaches us.
           </p>,
         ],
         [

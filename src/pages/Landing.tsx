@@ -88,11 +88,13 @@ function TodayScreen() {
         <p className="mt-2.5 rounded-xl bg-primary py-1.5 text-center text-[11px] font-black text-primary-foreground">Start Push B »</p>
       </div>
       <div className="rounded-2xl border border-border bg-card p-2.5">
-        <p className="text-[8px] font-bold text-muted-foreground uppercase">Protein today</p>
-        <p className="font-display text-base font-black">112 g</p>
-        <div className="mt-1 h-1.5 rounded-full bg-muted">
-          <div className="h-1.5 w-4/5 rounded-full bg-primary" />
-        </div>
+        <p className="text-[8px] font-bold text-muted-foreground uppercase">Body weight</p>
+        <p className="font-display text-base font-black">
+          78.4 kg <span className="font-sans text-[9px] font-semibold text-muted-foreground">−0.6 this month</span>
+        </p>
+        <svg viewBox="0 0 100 20" className="mt-1 h-5 w-full" aria-hidden="true">
+          <path d="M0,6 L14,8 L28,7 L42,10 L56,11 L70,12 L84,14 L100,15" fill="none" stroke="var(--primary)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </div>
     </div>
   );
@@ -180,7 +182,7 @@ const CARDS: { icon: string; title: string; body: string }[] = [
   { icon: "⏱️", title: "Rest timer & warm-ups", body: "30-second rest with ±15, alerts on the lock screen, and warm-up sets worked out for you." },
   { icon: "🎬", title: "How-to for every lift", body: "A looping demo, three form cues and a link to videos — right inside the workout." },
   { icon: "📶", title: "Works with no signal", body: "Basement gym? Log anyway. It syncs when you're back online." },
-  { icon: "🍳", title: "Protein & body tracking", body: "One-tap protein (eggs, paneer, dal, whey…), body weight, tape measurements and private progress photos." },
+  { icon: "⚖️", title: "Body weight, charted", body: "Weigh in whenever you like — today or any past day — and watch the trend over a month, three months or a year." },
   { icon: "🔁", title: "Bring your history", body: "Coming from Strong or Hevy? Import your CSV and keep every PR." },
 ];
 
