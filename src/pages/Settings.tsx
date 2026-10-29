@@ -203,29 +203,29 @@ export function Settings() {
         </p>
         {mode === "guest" && (
           <p className="mt-1 text-xs text-muted-foreground">
-            Your logs live only on this device{accountsEnabled ? " — create an account to keep them safe and use them on other devices." : ". Download a backup file now and then."}
+            Your logs live only on this device{accountsEnabled ? " — sign in with Google to keep them safe in your Drive and use them on other devices." : ". Download a backup file now and then."}
           </p>
         )}
         <div className="mt-3 flex flex-col gap-2">
           {mode === "guest" && accountsEnabled && (
-            <button className="btn-primary" onClick={() => signOut().then(() => navigate("/login?account=1"))}>
-              Create an account
+            <button className="btn-primary" onClick={() => signOut().then(() => navigate("/login"))}>
+              Sign in with Google
             </button>
           )}
           {mode === "account" && (
             <button className="btn-ghost" onClick={() => signOut().then(() => navigate("/login"))}>
-              Log out
+              Sign out
             </button>
           )}
           <button
             className="btn-danger"
             onClick={async () => {
-              if (!confirm(mode === "guest" ? "Erase every workout on this device?" : "Delete your account and every workout in it? This can't be undone.")) return;
+              if (!confirm(mode === "guest" ? "Erase every workout on this device?" : "Delete your Ironward data from your Google Drive? It moves to the Drive trash for 30 days.")) return;
               await deleteAccount();
               navigate("/login");
             }}
           >
-            {mode === "guest" ? "Erase all data" : "Delete account"}
+            {mode === "guest" ? "Erase all data" : "Delete my data"}
           </button>
         </div>
       </Section>

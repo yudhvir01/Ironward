@@ -1,22 +1,33 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useBackend } from "../context/BackendProvider";
 import { Capacitor } from "@capacitor/core";
-import { supabase, UPDATE_BASE_URL } from "../lib/env";
+import { startGoogleSignIn } from "../lib/backend/googleAuth";
 import { IronwardMark } from "../components/Logo";
 import { APP_MOTTO, APP_NAME, APP_TAGLINE } from "../lib/brand";
 
 export function Login() {
-  const { backend, accountsEnabled, chooseGuest, chooseAccount } = useBackend();
+  const { backend, accountsEnabled, chooseGuest } = useBackend();
   const navigate = useNavigate();
-  const [params] = useSearchParams();
-  const [showForm, setShowForm] = useState(params.has("account"));
+  const [error, setError] = useState<string | null>(null);
 
   // Signing in flips `backend` on; send them straight in.
   useEffect(() => {
     if (backend) navigate("/", { replace: true });
   }, [backend, navigate]);
   if (backend) return <Navigate to="/" replace />;
+
+  // Web only: the native apps would need a deep link back from the browser.
+  const googleEnabled = accountsEnabled && !Capacitor.isNativePlatform();
+
+  function google() {
+    setError(null);
+    try {
+      startGoogleSignIn();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Google sign-in failed.");
+    }
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden">
@@ -41,165 +52,42 @@ export function Login() {
         </ul>
       </div>
 
-      {showForm && accountsEnabled ? (
-        <AuthForm onBack={() => setShowForm(false)} onStart={chooseAccount} />
-      ) : (
-        <div className="space-y-3">
-          {accountsEnabled && (
-            <button className="btn-primary w-full py-4 text-base" onClick={() => setShowForm(true)}>
-              Sign up / Log in
-            </button>
-          )}
-          <button
-            className={`${accountsEnabled ? "btn-ghost" : "btn-primary"} w-full py-4 text-base`}
-            onClick={() => {
-              chooseGuest();
-              navigate("/", { replace: true });
-            }}
-          >
-            {accountsEnabled ? "Just try it — no account" : "Onward »"}
-          </button>
-          <p className="pt-2 text-center text-xs text-muted-foreground">
-            {accountsEnabled
-              ? "Without an account, logs stay on this device. You can move them into an account later."
-              : "Your logs are stored on this device."}
-          </p>
-          <Link to="/download" className="block pt-1 text-center text-sm font-bold text-primary">
-            Get the app for your phone →
-          </Link>
-          {!Capacitor.isNativePlatform() && (
-            <Link to="/" className="block text-center text-xs font-semibold text-muted-foreground">
-              ← About {APP_NAME}
-            </Link>
-          )}
-        </div>
-      )}
-    </div>
-    </div>
-  );
-}
-
-function AuthForm({ onBack, onStart }: { onBack: () => void; onStart: () => void }) {
-  const [isSignUp, setIsSignUp] = useState(true);
-  const [forgot, setForgot] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    if (!supabase) return;
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    if (forgot) {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${siteOrigin()}/reset-password` });
-      setBusy(false);
-      if (error) setError(error.message);
-      else setNotice("If that email has an account, a reset link is on its way. Open it on this device.");
-      return;
-    }
-    // Mode is set first so the session that comes back is picked up as
-    // the active backend.
-    onStart();
-    const { data, error } = isSignUp
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
-    setBusy(false);
-    if (error) setError(error.message);
-    else if (isSignUp && !data.session) setNotice("Check your email to confirm your account, then log in.");
-  }
-
-  async function google() {
-    if (!supabase) return;
-    setError(null);
-    onStart();
-    const { error } = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: siteOrigin() } });
-    if (error) setError(error.message);
-  }
-
-  if (forgot) {
-    return (
-      <form onSubmit={submit} className="space-y-3">
-        <p className="font-display text-2xl font-black">Reset your password</p>
-        <p className="text-sm text-muted-foreground">We'll email you a link to set a new one.</p>
-        <input className="field" type="email" autoComplete="email" placeholder="Email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        {notice && <p className="text-sm text-primary">{notice}</p>}
-        <button className="btn-primary w-full py-4 text-base" disabled={busy}>
-          {busy ? "…" : "Send reset link"}
-        </button>
-        <button type="button" className="w-full py-2 text-sm text-muted-foreground" onClick={() => setForgot(false)}>
-          Back to log in
-        </button>
-      </form>
-    );
-  }
-
-  return (
-    <form onSubmit={submit} className="space-y-3">
-      {GOOGLE_ENABLED && (
-        <>
-          <button type="button" className="btn-ghost w-full py-4 text-base" onClick={google}>
+      <div className="space-y-3">
+        {googleEnabled && (
+          <button className="btn-primary w-full py-4 text-base" onClick={google}>
             <GoogleMark /> Continue with Google
           </button>
-          <p className="text-center text-xs text-muted-foreground">or with email</p>
-        </>
-      )}
-      <div className="flex rounded-xl bg-muted p-1 text-sm font-semibold">
-        {(["Sign up", "Log in"] as const).map((label, i) => {
-          const active = isSignUp === (i === 0);
-          return (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setIsSignUp(i === 0)}
-              className={`flex-1 rounded-lg py-2 ${active ? "bg-card shadow-sm" : "text-muted-foreground"}`}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
-      <input className="field" type="email" autoComplete="email" placeholder="Email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-      <input
-        className="field"
-        type="password"
-        autoComplete={isSignUp ? "new-password" : "current-password"}
-        placeholder="Password (6+ characters)"
-        minLength={6}
-        required
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {notice && <p className="text-sm text-primary">{notice}</p>}
-      <button className="btn-primary w-full py-4 text-base" disabled={busy}>
-        {busy ? "…" : isSignUp ? "Create account" : "Log in"}
-      </button>
-      {!isSignUp && (
-        <button type="button" className="w-full text-sm font-semibold text-primary" onClick={() => setForgot(true)}>
-          Forgot password?
+        )}
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <button
+          className={`${googleEnabled ? "btn-ghost" : "btn-primary"} w-full py-4 text-base`}
+          onClick={() => {
+            chooseGuest();
+            navigate("/", { replace: true });
+          }}
+        >
+          {googleEnabled ? "Just try it — no account" : "Onward »"}
         </button>
-      )}
-      <button type="button" className="w-full py-2 text-sm text-muted-foreground" onClick={onBack}>
-        Back
-      </button>
-    </form>
+        <p className="pt-2 text-center text-xs text-muted-foreground">
+          {googleEnabled
+            ? "Without an account, logs stay on this device. You can move them into an account later."
+            : "Your logs are stored on this device."}
+        </p>
+        <p className="text-center text-xs text-muted-foreground">
+          By continuing you agree to the <Link to="/terms" className="underline">Terms</Link> and <Link to="/privacy" className="underline">Privacy Policy</Link>.
+        </p>
+        <Link to="/download" className="block pt-1 text-center text-sm font-bold text-primary">
+          Get the app for your phone →
+        </Link>
+        {!Capacitor.isNativePlatform() && (
+          <Link to="/" className="block text-center text-xs font-semibold text-muted-foreground">
+            ← About {APP_NAME}
+          </Link>
+        )}
+      </div>
+    </div>
+    </div>
   );
-}
-
-// Google sign-in goes through Supabase and needs the provider switched on
-// in the Supabase dashboard, so it's opt-in. Web only: the native apps
-// would need a deep link back from the browser.
-const GOOGLE_ENABLED = import.meta.env.VITE_ENABLE_GOOGLE === "1" && !Capacitor.isNativePlatform();
-
-// Where emailed links should land. Inside the native app the page origin
-// is https://localhost, so links point at the public site instead.
-function siteOrigin(): string {
-  return Capacitor.isNativePlatform() && UPDATE_BASE_URL ? UPDATE_BASE_URL : window.location.origin;
 }
 
 function GoogleMark() {

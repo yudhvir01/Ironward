@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Session } from "@supabase/supabase-js";
-import { supabase } from "../lib/env";
+import { GOOGLE_SIGNIN_ENABLED } from "../lib/env";
 import { GuestBackend, requestPersistentGuestStorage } from "../lib/backend/guestBackend";
-import { SupabaseBackend } from "../lib/backend/supabaseBackend";
+import { DriveBackend } from "../lib/backend/driveBackend";
+import { restoreGoogleSignIn, signOutOfGoogle, type GoogleDriveSession } from "../lib/backend/googleAuth";
 import type { Backend } from "../lib/backend/types";
 
 type Mode = "guest" | "account";
@@ -12,23 +12,23 @@ const MODE_KEY = "ironward.mode";
 
 function loadMode(): Mode | null {
   const raw = localStorage.getItem(MODE_KEY);
-  return raw === "guest" || (raw === "account" && supabase) ? raw : null;
+  return raw === "guest" || (raw === "account" && GOOGLE_SIGNIN_ENABLED) ? raw : null;
 }
 
 interface BackendContextValue {
   mode: Mode | null;
   // Null until a mode is chosen and (for accounts) a session exists.
   backend: Backend | null;
-  // False only during the initial Supabase getSession() round trip.
+  // False only while a saved Google sign-in is being restored.
   ready: boolean;
   ownerLabel: string | null;
-  session: Session | null;
   accountsEnabled: boolean;
   // Kept around after signing in, so Settings can offer to bring guest
   // workouts into the account.
   guestBackend: GuestBackend;
   chooseGuest: () => void;
-  chooseAccount: () => void;
+  // Called by /auth/google/callback once the code has been exchanged.
+  completeGoogleSignIn: (session: GoogleDriveSession) => void;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
 }
@@ -38,31 +38,38 @@ const BackendContext = createContext<BackendContextValue | undefined>(undefined)
 export function BackendProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<Mode | null>(() => loadMode());
-  const [session, setSession] = useState<Session | null>(null);
-  const [authLoading, setAuthLoading] = useState(Boolean(supabase));
+  const [session, setSession] = useState<GoogleDriveSession | null>(null);
+  const [authLoading, setAuthLoading] = useState(() => loadMode() === "account");
   const guestBackend = useMemo(() => new GuestBackend(), []);
   const identity = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+    if (mode !== "account" || session) {
       setAuthLoading(false);
-    });
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => setSession(next));
-    return () => data.subscription.unsubscribe();
+      return;
+    }
+    let cancelled = false;
+    restoreGoogleSignIn()
+      .then((restored) => !cancelled && setSession(restored))
+      .catch(() => undefined)
+      .finally(() => !cancelled && setAuthLoading(false));
+    return () => {
+      cancelled = true;
+    };
+    // Only on first load; a later sign-in sets the session itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const backend: Backend | null = useMemo(() => {
     if (mode === "guest") return guestBackend;
-    if (mode === "account" && supabase && session) return new SupabaseBackend(supabase, session.user.id);
+    if (mode === "account" && session) return new DriveBackend(session);
     return null;
   }, [mode, session, guestBackend]);
 
   // Cached rows belong to whoever produced them; switching identity on a
   // shared device must not flash the previous person's workouts.
   useEffect(() => {
-    const key = backend ? (backend.kind === "guest" ? "guest" : `account:${session?.user.id}`) : null;
+    const key = backend ? (backend.kind === "guest" ? "guest" : `account:${session?.email}`) : null;
     if (key !== identity.current) {
       if (identity.current !== null) queryClient.clear();
       identity.current = key;
@@ -79,26 +86,28 @@ export function BackendProvider({ children }: { children: ReactNode }) {
     mode,
     backend,
     ready: mode !== "account" || !authLoading,
-    ownerLabel: mode === "guest" ? "Guest (this device only)" : (session?.user.email ?? null),
-    session,
-    accountsEnabled: supabase !== null,
+    ownerLabel: mode === "guest" ? "Guest (this device only)" : (session?.email ?? null),
+    accountsEnabled: GOOGLE_SIGNIN_ENABLED,
     guestBackend,
     chooseGuest() {
       choose("guest");
       void requestPersistentGuestStorage();
     },
-    chooseAccount() {
+    completeGoogleSignIn(next) {
+      setSession(next);
       choose("account");
     },
     async signOut() {
-      if (mode === "account" && supabase) await supabase.auth.signOut();
+      if (mode === "account") await signOutOfGoogle();
+      setSession(null);
       queryClient.clear();
       choose(null);
     },
     async deleteAccount() {
       if (!backend) return;
       await backend.deleteAccount();
-      if (mode === "account" && supabase) await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+      if (mode === "account") await signOutOfGoogle();
+      setSession(null);
       queryClient.clear();
       choose(null);
     },

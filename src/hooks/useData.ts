@@ -12,7 +12,7 @@ export function useWorkouts() {
     queryKey: ["workouts", backend.kind],
     queryFn: () => backend.listWorkouts(),
     // Workouts saved offline show up straight away.
-    select: backend.kind === "supabase" ? withPending : undefined,
+    select: backend.kind === "drive" ? withPending : undefined,
   });
 }
 
@@ -32,7 +32,7 @@ export function useSaveWorkout() {
       try {
         await backend.saveWorkout(w);
       } catch (e) {
-        if (backend.kind === "supabase" && isNetworkError(e)) enqueue(w);
+        if (backend.kind === "drive" && isNetworkError(e)) enqueue(w);
         else throw e;
       }
     },

@@ -7,7 +7,7 @@
 A dead-simple gym log — web app + Android/iOS app (Capacitor) — built the same way as Waypoint: React 19 + Vite + Tailwind 4, one `Backend` interface (`src/lib/backend/`) with two implementations:
 
 - **No account** — data lives in that browser/phone's IndexedDB.
-- **Account** — email + password on a Supabase project baked in at build time, so anyone who opens the site can sign up and their logs follow them across devices. Row-level security keeps each person's logs private.
+- **Google account** — sign in with Google and your logs are saved as one file in an "Ironward" folder in your own Drive (`drive.file` scope: the app can't see anything else there), so they follow you across devices. No database to run.
 
 ## What it does
 
@@ -23,7 +23,7 @@ A dead-simple gym log — web app + Android/iOS app (Capacitor) — built the sa
 - **Bodyweight lifts** — pull-ups, dips, push-ups etc. are tracked by reps (the weight box is "+kg" added weight), with rep PRs and rep charts.
 - **kg or lb**, and a "smallest weight jump" setting so suggestions are always loadable.
 - **Works offline** — data is cached on the device; a workout finished with no signal is queued and synced later.
-- **Easy start** — 3-step welcome (units → plan or AI → reminders), forgot password, optional Google sign-in (`VITE_ENABLE_GOOGLE=1` + Google provider on in Supabase), **import from Strong or Hevy** (CSV; re-importing doesn't duplicate), and training-day reminders in the phone app.
+- **Easy start** — 3-step welcome (units → plan or AI → reminders), **import from Strong or Hevy** (CSV; re-importing doesn't duplicate), and training-day reminders in the phone app.
 - **More reports** — calendar view, front/back muscle heat map, deload-week suggestion when lifts stall (half the sets, ~10% lighter), protein tracker with Indian food shortcuts, tape measurements, and private progress photos (kept only on the phone).
 - **~870 more exercises** — the "Add exercise" search also covers the extended library (Free Exercise DB, public domain: `public/exercise-db.json`, rebuilt with `scripts/build-exercise-db.mjs`), each with a demo and step-by-step how-to. AI plans and Strong/Hevy imports match names against it too. Anything still unknown gets an "ask your AI how to do this" prompt, YouTube link, and a muscle picker so reports stay accurate.
 - **Gym-floor tools** — warm-up ramp for big lifts (bar → 50% → 70% → 85%), plate calculator (per-side plates, 20/15/10 kg bar), "How to do it" cues + form-video link for every exercise.
@@ -43,19 +43,19 @@ npm run dev
 
 Works immediately with no account (no setup needed).
 
-## Turn on accounts (so anyone can sign up)
+## Turn on Google sign-in
 
-1. Create a free project at [supabase.com](https://supabase.com).
-2. SQL Editor → paste [`supabase/setup.sql`](supabase/setup.sql) → Run. (Safe to re-run — re-run it after updating to get the `plans` table.)
-3. Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (Settings → API).
-4. Optional: Authentication → Sign In / Providers → Email → turn off "Confirm email" if you want sign-up to log people straight in.
-5. Authentication → URL Configuration: set the Site URL to your deployed site and add `https://<your-site>/reset-password` to Redirect URLs, so "Forgot password" emails land on the reset page.
-6. Deploy to Vercel with the same two env vars (`vercel.json` already handles SPA routing).
+1. Google Cloud Console: create a project, enable the **Google Drive API**, and configure the OAuth consent screen with the `drive.file` scope plus `email` and `profile`.
+2. Credentials → Create OAuth client ID → **Web application**:
+   - Authorized JavaScript origins: your site (e.g. `https://ironward.example.com`) and `http://localhost:5173`.
+   - Authorized redirect URIs: the same origins plus `/auth/google/callback`.
+3. In the Vercel project, set `VITE_GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_ID` (same value) and `GOOGLE_CLIENT_SECRET`. The secret is only read by [`api/google-token.ts`](api/google-token.ts), a stateless function that swaps Google's codes for tokens; it never reaches the browser.
+4. For local dev, put `VITE_GOOGLE_CLIENT_ID` in `.env.local` and run with `vercel dev` so `/api/google-token` exists.
 
 ## Mobile apps
 
 ```bash
-cp .env.local .env.capacitor.local   # same Supabase values for native builds
+cp .env.local .env.capacitor.local   # same values for native builds
 npm run cap:android                  # builds, syncs, opens Android Studio
 npm run cap:ios                      # builds, syncs, opens Xcode
 ```

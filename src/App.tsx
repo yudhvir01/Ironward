@@ -9,6 +9,7 @@ import { BackendProvider, useBackend } from "./context/BackendProvider";
 import { ThemeProvider } from "./context/ThemeProvider";
 import { AppShell } from "./components/AppShell";
 import { AppUpdater } from "./components/AppUpdater";
+import { GoogleCallback } from "./pages/GoogleCallback";
 import { Login } from "./pages/Login";
 import { Today } from "./pages/Today";
 import { WorkoutPage } from "./pages/Workout";
@@ -22,10 +23,10 @@ const Guide = lazy(() => import("./pages/Guide").then((m) => ({ default: m.Guide
 const Plans = lazy(() => import("./pages/Plans").then((m) => ({ default: m.Plans })));
 const PlanEditor = lazy(() => import("./pages/PlanEditor").then((m) => ({ default: m.PlanEditor })));
 const AiPlan = lazy(() => import("./pages/AiPlan").then((m) => ({ default: m.AiPlan })));
-const ResetPassword = lazy(() => import("./pages/ResetPassword").then((m) => ({ default: m.ResetPassword })));
 const Welcome = lazy(() => import("./pages/Welcome").then((m) => ({ default: m.Welcome })));
 const Import = lazy(() => import("./pages/Import").then((m) => ({ default: m.Import })));
 const Landing = lazy(() => import("./pages/Landing").then((m) => ({ default: m.Landing })));
+const Terms = lazy(() => import("./pages/Terms").then((m) => ({ default: m.Terms })));
 const Privacy = lazy(() => import("./pages/Privacy").then((m) => ({ default: m.Privacy })));
 const Download = lazy(() => import("./pages/Download").then((m) => ({ default: m.Download })));
 
@@ -47,7 +48,7 @@ function RequireBackend() {
     // Signed-out visitors to the website's front page get the landing
     // page; the phone app goes straight to sign-in, like Waypoint.
     if (pathname === "/" && mode !== "account" && !Capacitor.isNativePlatform()) return <Landing />;
-    return <Navigate to={mode === "account" ? "/login?account=1" : "/login"} replace />;
+    return <Navigate to="/login" replace />;
   }
   return <Outlet />;
 }
@@ -72,10 +73,11 @@ export default function App() {
             <OutboxSync />
             <Suspense fallback={<Splash />}>
               <Routes>
+                <Route path="/auth/google/callback" element={<GoogleCallback />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/download" element={<Download />} />
                 <Route path="/privacy" element={<Privacy />} />
-                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/terms" element={<Terms />} />
                 <Route element={<RequireBackend />}>
                   <Route path="/workout" element={<WorkoutPage />} />
                   <Route path="/welcome" element={<Welcome />} />

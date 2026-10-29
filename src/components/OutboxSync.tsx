@@ -12,7 +12,7 @@ export function OutboxSync() {
   const qc = useQueryClient();
 
   useEffect(() => {
-    if (!backend || backend.kind !== "supabase") return;
+    if (!backend || backend.kind !== "drive") return;
     let busy = false;
     async function run() {
       if (busy || !pendingWorkouts().length || navigator.onLine === false) return;

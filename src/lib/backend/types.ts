@@ -13,11 +13,11 @@ export interface Backup {
 }
 
 // The one seam every page and hook talks through. Pages never touch
-// Supabase or IndexedDB directly. A gym log is small (a few hundred
+// Drive or IndexedDB directly. A gym log is small (a few hundred
 // workouts a year), so reports are computed client-side from the full
 // lists rather than with per-backend queries.
 export interface Backend {
-  readonly kind: "guest" | "supabase";
+  readonly kind: "guest" | "drive";
 
   // Finished workouts, newest first.
   listWorkouts(): Promise<Workout[]>;

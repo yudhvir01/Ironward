@@ -32,6 +32,7 @@ export function SiteFooter() {
         <a href="/#features" className="hover:underline">Features</a>
         <Link to="/download" className="hover:underline">Download</Link>
         <Link to="/privacy" className="hover:underline">Privacy</Link>
+        <Link to="/terms" className="hover:underline">Terms</Link>
         <Link to="/login" className="hover:underline">Sign in</Link>
       </div>
       <p className="mt-3">
