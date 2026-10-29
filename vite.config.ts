@@ -30,7 +30,7 @@ export default defineConfig(({ mode }) => ({
       closeBundle() {
         if (mode !== 'capacitor') return
         const out = resolve(process.env.IRONWARD_OUT_DIR || 'dist')
-        for (const dir of ['downloads', 'updates']) rmSync(resolve(out, dir), { recursive: true, force: true })
+        for (const dir of ['downloads', 'updates', '.well-known']) rmSync(resolve(out, dir), { recursive: true, force: true })
       },
     },
     react(),
@@ -44,7 +44,9 @@ export default defineConfig(({ mode }) => ({
       workbox: {
         // The APK and OTA zips are downloads, not app shell.
         globIgnores: ['downloads/**', 'updates/**'],
-        navigateFallbackDenylist: [/^\/downloads\//, /^\/updates\//, /^\/api\//],
+        // /auth/ always loads fresh: a cached older copy of the app may not know
+        // the Google callback route and would bounce it to the home page.
+        navigateFallbackDenylist: [/^\/downloads\//, /^\/updates\//, /^\/api\//, /^\/auth\//, /^\/\.well-known\//],
         // Exercise demo photos (~3 MB in all) aren't precached; each one is
         // kept after its first view so it works with no signal at the gym.
         runtimeCaching: [

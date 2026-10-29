@@ -287,3 +287,19 @@ export function saveMuscleFix(exerciseId: string, muscle: Muscle) {
     // The fix still applies to today's workout.
   }
 }
+
+// Forgets everything this device remembers about someone's training (the
+// unfinished workout, chosen plan, per-day tweaks, onboarding), so erasing
+// or deleting data really starts over at the welcome steps. Display
+// preferences like units and theme are kept.
+export function resetTrainingState() {
+  try {
+    const fixed = [DRAFT_KEY, PROGRAM_KEY, ONBOARDED_KEY, DELOAD_KEY, REST_ENDS_KEY, NOTES_KEY, "ironward.cache"];
+    const prefixed = ["ironward.warmup.", "ironward.day."];
+    for (const key of Object.keys(localStorage)) {
+      if (fixed.includes(key) || prefixed.some((p) => key.startsWith(p))) localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage unavailable: nothing to forget.
+  }
+}

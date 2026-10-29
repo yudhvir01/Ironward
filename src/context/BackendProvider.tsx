@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { GOOGLE_SIGNIN_ENABLED } from "../lib/env";
+import { resetTrainingState } from "../lib/local";
 import { GuestBackend, requestPersistentGuestStorage } from "../lib/backend/guestBackend";
 import { DriveBackend } from "../lib/backend/driveBackend";
 import { restoreGoogleSignIn, SESSION_EXPIRED_EVENT, signOutOfGoogle, type GoogleDriveSession } from "../lib/backend/googleAuth";
@@ -119,6 +120,7 @@ export function BackendProvider({ children }: { children: ReactNode }) {
     async deleteAccount() {
       if (!backend) return;
       await backend.deleteAccount();
+      resetTrainingState();
       if (mode === "account") await signOutOfGoogle();
       setSession(null);
       queryClient.clear();

@@ -10,6 +10,7 @@ import { ThemeProvider } from "./context/ThemeProvider";
 import { AppShell } from "./components/AppShell";
 import { AppUpdater } from "./components/AppUpdater";
 import { GoogleCallback } from "./pages/GoogleCallback";
+import { NativeAppLifecycle } from "./components/NativeAppLifecycle";
 import { Login } from "./pages/Login";
 import { Today } from "./pages/Today";
 import { WorkoutPage } from "./pages/Workout";
@@ -70,6 +71,7 @@ export default function App() {
         <BackendProvider>
           <BrowserRouter>
             <AppUpdater />
+            <NativeAppLifecycle />
             <OutboxSync />
             <Suspense fallback={<Splash />}>
               <Routes>

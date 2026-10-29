@@ -21,11 +21,7 @@ export function Login() {
 
   function google() {
     setError(null);
-    try {
-      startGoogleSignIn();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Google sign-in failed.");
-    }
+    startGoogleSignIn().catch((e: unknown) => setError(e instanceof Error ? e.message : "Google sign-in failed."));
   }
 
   return (

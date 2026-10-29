@@ -1,4 +1,6 @@
-import { GOOGLE_CLIENT_ID, GOOGLE_TOKEN_RELAY_URL } from "../env";
+import { Browser } from "@capacitor/browser";
+import { Capacitor } from "@capacitor/core";
+import { GOOGLE_CLIENT_ID, GOOGLE_TOKEN_RELAY_URL, UPDATE_BASE_URL } from "../env";
 import { clearDriveSession, loadDriveSession, saveDriveSession } from "./driveAuthStore";
 
 // drive.file: the app can only see/create files it makes itself (or that
@@ -15,8 +17,12 @@ function oauthStorage(): Storage {
   return localStorage;
 }
 
+// The apps use the public site's callback too: Android hands that URL back
+// to the app as a verified App Link (see AndroidManifest.xml and
+// public/.well-known/assetlinks.json), so one redirect URI serves both.
 export function googleRedirectUri(): string {
-  return `${window.location.origin}/auth/google/callback`;
+  const origin = Capacitor.isNativePlatform() ? UPDATE_BASE_URL : window.location.origin;
+  return `${origin}/auth/google/callback`;
 }
 
 // access_type=offline + prompt=consent are what make Google hand back a
@@ -43,8 +49,12 @@ export function buildGoogleAuthUrl(): string {
   return `https://accounts.google.com/o/oauth2/v2/auth?${params}`;
 }
 
-export function startGoogleSignIn(): void {
-  window.location.assign(buildGoogleAuthUrl());
+export async function startGoogleSignIn(): Promise<void> {
+  const url = buildGoogleAuthUrl();
+  // Google refuses sign-in inside an app's web view, so the apps use the
+  // system browser (a Custom Tab on Android).
+  if (Capacitor.isNativePlatform()) await Browser.open({ url });
+  else window.location.assign(url);
 }
 
 // One-time use: cleared as soon as it's checked, whether or not it

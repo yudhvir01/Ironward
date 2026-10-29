@@ -215,7 +215,7 @@ export function Settings() {
         )}
         <div className="mt-3 flex flex-col gap-2">
           {mode === "guest" && accountsEnabled && (
-            <button className="btn-primary" onClick={() => startGoogleSignIn()}>
+            <button className="btn-primary" onClick={() => void startGoogleSignIn().catch((e: unknown) => setMessage(e instanceof Error ? e.message : "Google sign-in failed."))}>
               Sign in with Google
             </button>
           )}

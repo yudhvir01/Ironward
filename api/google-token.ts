@@ -13,8 +13,22 @@ type TokenRequest =
   | { grant_type: "authorization_code"; code: string; redirect_uri: string }
   | { grant_type: "refresh_token"; refresh_token: string };
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+// The website calls this same-origin; the Android and iOS apps call it
+// from their web view's own origin, so those two get CORS headers.
+const APP_ORIGINS = new Set(["https://localhost", "capacitor://localhost"]);
+function json(body: unknown, status: number, corsOrigin: string | null): Response {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (corsOrigin) Object.assign(headers, corsHeaders(corsOrigin));
+  return new Response(JSON.stringify(body), { status, headers });
+}
+
+function corsHeaders(origin: string): Record<string, string> {
+  return { "Access-Control-Allow-Origin": origin, "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "content-type", Vary: "Origin" };
+}
+
+export function OPTIONS(req: Request): Response {
+  const origin = req.headers.get("origin") ?? "";
+  return new Response(null, { status: 204, headers: APP_ORIGINS.has(origin) ? corsHeaders(origin) : {} });
 }
 
 function isValidRequest(body: unknown): body is TokenRequest {
@@ -26,19 +40,21 @@ function isValidRequest(body: unknown): body is TokenRequest {
 }
 
 export async function POST(req: Request): Promise<Response> {
+  const origin = req.headers.get("origin") ?? "";
+  const cors = APP_ORIGINS.has(origin) ? origin : null;
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    return json({ error: "server_misconfigured", message: "GOOGLE_CLIENT_ID/SECRET not set" }, 500);
+    return json({ error: "server_misconfigured", message: "GOOGLE_CLIENT_ID/SECRET not set" }, 500, cors);
   }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
-    return json({ error: "invalid_json" }, 400);
+    return json({ error: "invalid_json" }, 400, cors);
   }
-  if (!isValidRequest(body)) return json({ error: "invalid_request" }, 400);
+  if (!isValidRequest(body)) return json({ error: "invalid_request" }, 400, cors);
 
   const params = new URLSearchParams({ client_id: clientId, client_secret: clientSecret });
   if (body.grant_type === "authorization_code") {
@@ -59,7 +75,7 @@ export async function POST(req: Request): Promise<Response> {
 
   // Google's {error, error_description} is safe to pass through; it never
   // includes the secret.
-  if (!googleRes.ok) return json(data, googleRes.status);
+  if (!googleRes.ok) return json(data, googleRes.status, cors);
 
   // A refresh grant doesn't return a new refresh_token; the caller keeps
   // reusing the original one.
@@ -68,5 +84,5 @@ export async function POST(req: Request): Promise<Response> {
     expires_in: data.expires_in,
     refresh_token: data.refresh_token,
     scope: data.scope,
-  });
+  }, 200, cors);
 }

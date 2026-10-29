@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.yudhvirsingh.ironward",
+      "sha256_cert_fingerprints": [
+        "B4:9B:D4:86:FC:95:C4:52:99:5B:C7:6A:7E:CD:BB:56:17:90:56:F8:88:47:66:4A:CE:CF:6F:12:6A:5D:E9:E5"
+      ]
+    }
+  }
+]
