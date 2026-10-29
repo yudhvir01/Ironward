@@ -1,9 +1,11 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { PageHeader } from "../components/AppShell";
 import { APP_NAME } from "../lib/brand";
-import { APP_VERSION } from "../lib/buildInfo";
+import { APP_VERSION, BUILD_TIME } from "../lib/buildInfo";
+import { applyStagedUpdate, getUpdaterDiagnostics, installedNativeBuild, isNative, type UpdateResult, type UpdaterDiagnostics } from "../lib/otaUpdater";
+import { runUpdateCheck } from "../lib/updateFlow";
 import { useBackend, useRequiredBackend } from "../context/BackendProvider";
 import { startGoogleSignIn } from "../lib/backend/googleAuth";
 import type { ImportData } from "../lib/backend/types";
@@ -193,16 +195,7 @@ export function Settings() {
         {message && <p className="mt-3 text-sm text-primary">{message}</p>}
       </Section>
 
-      <Section title="App">
-        <div className="flex items-center justify-between text-sm">
-          <span>
-            {APP_NAME} <span className="text-muted-foreground">v{APP_VERSION}</span>
-          </span>
-          <Link to="/download" className="font-bold text-primary">
-            Install on phone →
-          </Link>
-        </div>
-      </Section>
+      <AboutSection />
 
       <Section title="Account">
         <p className="text-sm">
@@ -246,5 +239,125 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <p className="label mb-3">{title}</p>
       {children}
     </section>
+  );
+}
+
+// Version, and inside the app: check for updates, switch to a downloaded
+// one straight away, and what the updater is doing (ported from Waypoint).
+function AboutSection() {
+  const native = isNative();
+  const [nativeBuild, setNativeBuild] = useState<number | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<UpdateResult | null>(null);
+  const [details, setDetails] = useState<UpdaterDiagnostics | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (native) void installedNativeBuild().then(setNativeBuild);
+  }, [native]);
+
+  useEffect(() => {
+    if (native && showDetails) void getUpdaterDiagnostics().then(setDetails).catch(() => undefined);
+  }, [native, showDetails, result]);
+
+  async function apply(bundleId: string) {
+    setApplying(true);
+    setApplyError(null);
+    try {
+      await applyStagedUpdate(bundleId);
+    } catch (e) {
+      setApplyError(e instanceof Error ? e.message : "Couldn't switch to the new version.");
+      setApplying(false);
+    }
+  }
+
+  async function check() {
+    setChecking(true);
+    try {
+      setResult(await runUpdateCheck({ manual: true }));
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  const message = !result
+    ? null
+    : result.kind === "up-to-date"
+      ? "You're on the latest version."
+      : result.kind === "bundle-ready"
+        ? `Version ${result.version} is downloaded and ready.`
+        : result.kind === "native"
+          ? result.sha256
+            ? `A new app version (${result.versionName}) is available. It's downloading now — follow the progress at the top of the screen.`
+            : `A new app version (${result.versionName}) is needed. Use the Update button at the top of the screen.`
+          : result.kind === "error"
+            ? `Couldn't check: ${result.message}`
+            : result.kind === "unsupported"
+              ? "This build can't check for updates."
+              : null;
+
+  return (
+    <Section title="About">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span>
+          {APP_NAME} <span className="text-muted-foreground">v{APP_VERSION}</span>
+          <span className="block text-xs text-muted-foreground">
+            Built {new Date(BUILD_TIME).toLocaleDateString()}
+            {native && nativeBuild ? ` · app build ${nativeBuild}` : ""}
+          </span>
+        </span>
+        {native ? (
+          <button className="btn-ghost shrink-0 !px-3 !py-2 text-sm" onClick={check} disabled={checking}>
+            {checking ? "Checking…" : "Check for updates"}
+          </button>
+        ) : (
+          <Link to="/download" className="shrink-0 font-bold text-primary">
+            Install on phone →
+          </Link>
+        )}
+      </div>
+      {!native && <p className="mt-2 text-xs text-muted-foreground">The website updates itself.</p>}
+      {message && <p className={`mt-3 text-sm ${result?.kind === "error" ? "text-destructive" : "text-muted-foreground"}`}>{message}</p>}
+      {result?.kind === "bundle-ready" && (
+        <div className="mt-3">
+          <button className="btn-primary !px-4 !py-2" disabled={applying} onClick={() => void apply(result.bundleId)}>
+            {applying ? "Restarting…" : "Restart now to use it"}
+          </button>
+          <p className="mt-1.5 text-xs text-muted-foreground">Or leave it: it switches by itself the next time you leave the app.</p>
+          {applyError && <p className="mt-1.5 text-xs text-destructive">{applyError}</p>}
+        </div>
+      )}
+      {native && (
+        <div className="mt-3">
+          <button className="text-xs text-muted-foreground underline underline-offset-2" onClick={() => setShowDetails((v) => !v)}>
+            {showDetails ? "Hide update details" : "Update details"}
+          </button>
+          {showDetails && details && (
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 rounded-xl border border-border px-3 py-2 text-xs">
+              <dt className="text-muted-foreground">Running build</dt>
+              <dd className="font-mono">{new Date(details.runningBuildTime).toLocaleString()}</dd>
+              <dt className="text-muted-foreground">Bundle</dt>
+              <dd className="break-all font-mono">
+                {details.currentBundleId} ({details.currentBundleVersion})
+              </dd>
+              <dt className="text-muted-foreground">Waiting</dt>
+              <dd className="break-all font-mono">{details.nextBundleId ?? "none"}</dd>
+              <dt className="text-muted-foreground">Downloaded</dt>
+              <dd className="font-mono">{details.bundles.length === 0 ? "none" : details.bundles.map((b) => `${b.version} ${b.status}`).join(", ")}</dd>
+              <dt className="text-muted-foreground">App build</dt>
+              <dd className="font-mono">{details.nativeBuild}</dd>
+              {details.problem && (
+                <>
+                  <dt className="text-destructive">Problem</dt>
+                  <dd className="text-destructive">{details.problem}</dd>
+                </>
+              )}
+            </dl>
+          )}
+        </div>
+      )}
+    </Section>
   );
 }

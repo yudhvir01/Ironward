@@ -1,71 +1,191 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { App as CapacitorApp } from "@capacitor/app";
 import { APP_NAME } from "../lib/brand";
-import { openExternal } from "../lib/openUrl";
-import { checkForUpdates, isNative, markBundleReady, type UpdateResult } from "../lib/otaUpdater";
+import { apkUpdater, useApkUpdate } from "../lib/apkUpdater";
+import { isNative, markBundleReady, reviewStagedUpdate } from "../lib/otaUpdater";
+import { rememberDismissed, runUpdateCheck } from "../lib/updateFlow";
 
+// Don't ask the server more often than this, however often the app is
+// switched to or the network flickers.
 const MIN_INTERVAL_MS = 30 * 60 * 1000;
+// Let the app finish starting before using the network for this.
 const STARTUP_DELAY_MS = 4000;
-const DISMISSED_KEY = "ironward.dismissedApk";
 
-// Runs only inside the installed app. Web-code updates are silent:
-// downloaded in the background, used from the next launch. A new APK
-// can't be silent (Android asks the person to confirm installing it), so
-// it's offered as a download.
+function percent(received: number, total: number): number | null {
+  return total > 0 ? Math.min(100, Math.round((received / total) * 100)) : null;
+}
+
+function megabytes(bytes: number): string {
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
+
+// Runs only inside the installed app.
+//
+// Web bundle updates are fully quiet: downloaded in the background and used
+// from the next launch. A new APK can't be quiet (Android makes a person
+// confirm installing it), so the app downloads it with a progress bar and
+// then opens Android's own install screen, which is that confirmation.
 export function AppUpdater() {
-  const [offer, setOffer] = useState<Extract<UpdateResult, { kind: "native" }> | null>(null);
+  const update = useApkUpdate();
   const lastCheck = useRef(0);
 
   useEffect(() => {
     if (!isNative()) return;
     let active = true;
+
+    // This bundle started fine, so keep it. (If this never runs, the
+    // plugin rolls back to the previous bundle by itself.)
     void markBundleReady();
+    reviewStagedUpdate();
 
     async function run() {
       const now = Date.now();
-      if (now - lastCheck.current < MIN_INTERVAL_MS || navigator.onLine === false) return;
+      if (now - lastCheck.current < MIN_INTERVAL_MS) return;
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return;
       lastCheck.current = now;
-      const result = await checkForUpdates();
-      if (!active || result.kind !== "native") return;
-      const dismissed = Number(localStorage.getItem(DISMISSED_KEY)) || 0;
-      if (result.required || result.versionCode > dismissed) setOffer(result);
+      await runUpdateCheck({ manual: false });
     }
 
-    const startup = window.setTimeout(() => void run(), STARTUP_DELAY_MS);
-    let remove: (() => void) | undefined;
-    void CapacitorApp.addListener("appStateChange", (s) => s.isActive && void run()).then((l) => {
-      if (active) remove = () => void l.remove();
-      else void l.remove();
+    const startup = window.setTimeout(() => void (active && run()), STARTUP_DELAY_MS);
+    const onOnline = () => void run();
+    window.addEventListener("online", onOnline);
+
+    let removeListener: (() => Promise<void>) | undefined;
+    void CapacitorApp.addListener("appStateChange", (state) => {
+      if (!state.isActive) return;
+      // Back from "allow installs" or from Android's installer.
+      void apkUpdater.resumeAfterSettings();
+      apkUpdater.returnedFromInstaller();
+      void run();
+    }).then((listener) => {
+      if (active) removeListener = () => listener.remove();
+      else void listener.remove();
     });
+
     return () => {
       active = false;
       window.clearTimeout(startup);
-      remove?.();
+      window.removeEventListener("online", onOnline);
+      void removeListener?.();
     };
   }, []);
 
-  if (!offer) return null;
+  const { phase, offer, received, total, error } = update;
+  if (!offer || phase === "idle") return null;
+
+  const pct = percent(received, total);
+  const primary = "btn-primary shrink-0 !rounded-full !px-4 !py-2";
+  const quiet = "shrink-0 px-2 py-1.5 text-xs font-semibold text-muted-foreground";
+
+  function notNow() {
+    if (offer) rememberDismissed(offer.versionCode);
+    void apkUpdater.cancel().then(() => apkUpdater.dismiss());
+  }
+
   return (
-    <div className="fixed inset-x-0 top-0 z-[60] px-4" style={{ paddingTop: "calc(0.75rem + env(safe-area-inset-top))" }} role="status">
-      <div className="mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-2xl">
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold">New {APP_NAME} {offer.versionName}</p>
-          <p className="text-xs text-muted-foreground">{offer.required ? "Needed for the latest features." : "Your workouts stay as they are."}</p>
-        </div>
-        {!offer.required && (
-          <button
-            className="text-xs font-semibold text-muted-foreground"
-            onClick={() => {
-              localStorage.setItem(DISMISSED_KEY, String(offer.versionCode));
-              setOffer(null);
-            }}
-          >
-            Later
-          </button>
+    <div
+      className="fixed inset-x-0 top-0 z-[60] flex justify-center px-4"
+      style={{ paddingTop: "calc(0.75rem + env(safe-area-inset-top))" }}
+      role="status"
+      aria-live="polite"
+    >
+      <div className="w-full max-w-md rounded-2xl border border-border bg-card px-4 py-3 shadow-2xl">
+        {phase === "downloading" && (
+          <>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-bold">Downloading {APP_NAME} {offer.versionName}</p>
+              <button type="button" onClick={() => void apkUpdater.cancel()} className={quiet}>
+                Cancel
+              </button>
+            </div>
+            <div
+              className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-border"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={pct ?? undefined}
+            >
+              <div
+                className={`h-full rounded-full bg-primary transition-[width] duration-150 ${
+                  pct === null ? "w-1/3 animate-pulse" : ""
+                }`}
+                style={pct === null ? undefined : { width: `${pct}%` }}
+              />
+            </div>
+            <p className="mt-1.5 text-xs tabular-nums text-muted-foreground">
+              {pct === null ? "Starting…" : `${pct}% · ${megabytes(received)} of ${megabytes(total)} MB`}
+            </p>
+          </>
         )}
-        <button className="btn-primary !rounded-full !px-4 !py-2" onClick={() => openExternal(offer.apkUrl)}>
-          Update
-        </button>
+
+        {phase === "needs-permission" && (
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold">One-time permission needed</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Allow {APP_NAME} to install its own updates, then come back.
+              </p>
+            </div>
+            <button type="button" onClick={() => void apkUpdater.openSettings()} className={primary}>
+              Open settings
+            </button>
+          </div>
+        )}
+
+        {(phase === "ready" || phase === "installing") && (
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold">
+                {phase === "installing" ? "Waiting for Android…" : `${APP_NAME} ${offer.versionName} is ready`}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Tap Install on the screen Android shows. Your workouts stay.
+              </p>
+            </div>
+            {phase === "ready" && (
+              <button type="button" onClick={() => void apkUpdater.install()} className={primary}>
+                Install
+              </button>
+            )}
+          </div>
+        )}
+
+        {phase === "error" && (
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold">The update didn't finish</p>
+              <p className="mt-0.5 break-words text-xs text-destructive">{error}</p>
+            </div>
+            <button type="button" onClick={() => void apkUpdater.start()} className={primary}>
+              Try again
+            </button>
+            {!offer.required && (
+              <button type="button" onClick={notNow} className={quiet}>
+                Not now
+              </button>
+            )}
+          </div>
+        )}
+
+        {phase === "offered" && (
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold">A new version of {APP_NAME} is available</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Version {offer.versionName}
+                {offer.required && " — needed for the latest features"}
+              </p>
+            </div>
+            {!offer.required && (
+              <button type="button" onClick={notNow} className={quiet}>
+                Not now
+              </button>
+            )}
+            <button type="button" onClick={() => void apkUpdater.start()} className={primary}>
+              Update
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
