@@ -1,9 +1,21 @@
+import { Capacitor } from "@capacitor/core";
+import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
+import { Share } from "@capacitor/share";
 import type { Backup } from "./backend/types";
 import { isCounted } from "./stats";
 import type { Program } from "./program";
 import type { BodyWeight, DailyLog, Workout } from "./types";
 
 export function download(name: string, type: string, text: string) {
+  // The app's web view ignores blob downloads, so inside it the file goes
+  // through the share sheet (save to Drive or Files, send, and so on).
+  if (Capacitor.isNativePlatform()) {
+    void (async () => {
+      const { uri } = await Filesystem.writeFile({ path: name, data: text, directory: Directory.Cache, encoding: Encoding.UTF8 });
+      await Share.share({ title: name, files: [uri] });
+    })().catch(() => undefined);
+    return;
+  }
   const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement("a");
   a.href = url;
