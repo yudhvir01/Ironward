@@ -1,0 +1,160 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+  Ironward palette: forged graphite and steel, with one molten ember
+  accent reserved for "do this" — Start, tick a set, Finish. Everything
+  else stays cool and quiet, like iron, so the ember is the only thing
+  that glows.
+*/
+:root {
+  --background: #f6f5f3;
+  --foreground: #121315;
+  --card: #ffffff;
+  --muted: #ecebe8;
+  --muted-foreground: #66625d;
+  --border: #e0ddd8;
+  --primary: #c2410c;
+  --primary-soft: #ffedd5;
+  --primary-foreground: #ffffff;
+  --done: #c2410c;
+  --warn: #a16207;
+  --destructive: #dc2626;
+  --steel: #8b939e;
+}
+
+.dark {
+  --background: #0c0d0f;
+  --foreground: #f4f4f5;
+  --card: #16181c;
+  --muted: #23262c;
+  --muted-foreground: #9aa0a9;
+  --border: #282c33;
+  --primary: #ff6b1a;
+  --primary-soft: #2b1608;
+  --primary-foreground: #160802;
+  --done: #ff6b1a;
+  --warn: #facc15;
+  --destructive: #f87171;
+  --steel: #6b7380;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-done: var(--done);
+  --color-warn: var(--warn);
+  --color-destructive: var(--destructive);
+  --color-steel: var(--steel);
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Archivo", "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: "tnum" 1;
+}
+
+/* Number inputs: no spinners — the keyboard is the interface. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Headlines and big numbers: wide, heavy, leaning forward — the brand
+   in a typeface. */
+.font-display {
+  font-family: var(--font-display);
+  font-stretch: 118%;
+  font-style: italic;
+  letter-spacing: -0.02em;
+}
+
+/* An ember glow behind the one card that matters on a screen. */
+.glow {
+  background:
+    radial-gradient(120% 80% at 100% 0%, color-mix(in oklab, var(--primary) 20%, transparent), transparent 60%),
+    var(--card);
+}
+
+/* Forward chevrons » — the brand's motion, used faintly behind heroes. */
+.chevrons {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='40' viewBox='0 0 56 40'%3E%3Cpath d='M6 6l14 14-14 14M26 6l14 14-14 14' fill='none' stroke='%23888' stroke-width='5' stroke-linecap='round' stroke-linejoin='round' opacity='0.09'/%3E%3C/svg%3E");
+  background-size: 56px 40px;
+}
+
+/* Molten ember text for the odd word that should burn. */
+.ember-text {
+  background: linear-gradient(100deg, var(--primary), color-mix(in oklab, var(--primary) 55%, #ffd166));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+.animate-in {
+  animation: fade-up 0.35s ease-out both;
+}
+.animate-pop {
+  animation: pop 0.28s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-in, .animate-pop { animation: none; }
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold transition active:scale-[0.97] disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-primary text-primary-foreground shadow-[0_8px_24px_-8px_var(--primary)];
+}
+@utility btn-ghost {
+  @apply btn bg-muted text-foreground;
+}
+@utility btn-danger {
+  @apply btn bg-destructive/10 text-destructive;
+}
+@utility card {
+  @apply rounded-3xl border border-border bg-card;
+}
+@utility field {
+  @apply w-full rounded-xl border border-border bg-background px-3 py-3 text-base outline-none focus:border-primary;
+}
+@utility label {
+  @apply text-xs font-semibold tracking-wide text-muted-foreground uppercase;
+}

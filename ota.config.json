@@ -1,0 +1,9 @@
+{
+  "_comment": "Read by scripts/release-web.mjs. minNativeVersion is the lowest Android versionCode that can run the web bundle: raise it only when the bundle needs a new native plugin or permission. apk describes the APK published at /downloads/ironward.apk: change it when you publish a new one (or set it to null before the first one).",
+  "minNativeVersion": 1,
+  "apk": {
+    "versionCode": 1,
+    "versionName": "0.1.0",
+    "url": "/downloads/ironward.apk"
+  }
+}

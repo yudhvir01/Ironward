@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ironward</string>
+    <string name="title_activity_main">Ironward</string>
+    <string name="package_name">com.yudhvirsingh.ironward</string>
+    <string name="custom_url_scheme">com.yudhvirsingh.ironward</string>
+</resources>
