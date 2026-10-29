@@ -4,6 +4,8 @@ import { IronwardMark } from "../components/Logo";
 import { useBackend } from "../context/BackendProvider";
 import { DriveBackend } from "../lib/backend/driveBackend";
 import { completeGoogleSignIn, consumeGoogleOAuthState } from "../lib/backend/googleAuth";
+import { moveDevicePhotosToDrive } from "../lib/photoSync";
+import { listDevicePhotos } from "../lib/photos";
 
 // Where Google sends the browser back to after the consent screen. The
 // path must match an Authorized redirect URI in the Google Cloud console
@@ -51,6 +53,12 @@ export function GoogleCallback() {
           // Only once Drive has it: the device copy is no longer needed,
           // and keeping it would make it look like separate data.
           await guestBackend.deleteAccount();
+        }
+        // Photos are bigger; if they can't all go now, the Progress tab
+        // carries on with the rest later.
+        if ((await listDevicePhotos().catch(() => [])).length) {
+          setStatus("Moving your progress photos to Google Drive…");
+          await moveDevicePhotosToDrive(new DriveBackend(session)).catch(() => undefined);
         }
       } catch {
         // Signed in either way. The guest data is still on the device, and

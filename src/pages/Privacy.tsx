@@ -24,7 +24,7 @@ export function Privacy() {
               When you choose "Continue with Google", {APP_NAME} asks for your email address and basic profile (to show who is signed in) and the <b>drive.file</b> permission. That permission only lets the app see and edit files it created itself; it can't read anything else in your Drive.
             </p>
             <p key="b">
-              The app saves your data as one file, <code>ironward-data.json</code>, in an "{APP_NAME}" folder in your Drive. Your sign-in token is kept in your browser. The only server involved is a small function that exchanges Google's sign-in codes for tokens using our app's secret. It does not store, log or read your data.
+              The app saves your data as one file, <code>ironward-data.json</code>, plus any progress photos, in an "{APP_NAME}" folder in your Drive. Your sign-in token is kept in your browser. The only server involved is a small function that exchanges Google's sign-in codes for tokens using our app's secret. It does not store, log or read your data.
             </p>
           </>,
         ],
@@ -38,7 +38,12 @@ export function Privacy() {
             , including the Limited Use requirements. Data from your Google account is used only to sign you in and to store your own training data in your own Drive. It is never sold, shared with others, used for advertising, or used to train AI models.
           </p>,
         ],
-        ["Progress photos", <p key="a">Never uploaded. They stay on the device you took them on and aren't included in backups.</p>],
+        [
+          "Progress photos",
+          <p key="a">
+            Signed in with Google, each photo is saved as an image file in the same "{APP_NAME}" folder in your Drive, and deleting one in the app moves it to your Drive trash. As a guest they stay on the device you took them on. Photos are never sent to us and aren't included in backup files.
+          </p>,
+        ],
         ["What we don't do", <p key="a">No ads, no selling or sharing your data, no third-party trackers in the app.</p>],
         [
           "The AI coach",

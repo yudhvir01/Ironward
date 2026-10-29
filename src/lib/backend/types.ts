@@ -12,6 +12,11 @@ export interface Backup {
   logs?: DailyLog[];
 }
 
+export interface PhotoMeta {
+  id: string;
+  day: string;
+}
+
 export interface ImportData {
   workouts?: Workout[];
   bodyweights?: BodyWeight[];
@@ -35,6 +40,9 @@ export interface Backend {
   // Body-weight check-ins, newest day first.
   listBodyWeights(): Promise<BodyWeight[]>;
   addBodyWeight(input: { day: string; kg: number }): Promise<BodyWeight>;
+  // The weigh-in for a day: replaces any already logged that day, in one
+  // write.
+  setBodyWeight(row: BodyWeight): Promise<void>;
   deleteBodyWeight(id: string): Promise<void>;
 
   // Protein and body measurements, newest first.
@@ -47,6 +55,14 @@ export interface Backend {
   listPlans(): Promise<Program[]>;
   savePlan(plan: Program): Promise<void>;
   deletePlan(id: string): Promise<void>;
+
+  // Progress photos, oldest first. A guest's stay on the device; with a
+  // Google account each is a file in the Ironward folder in Drive, and
+  // deleting one moves that file to the Drive trash.
+  listPhotos(): Promise<PhotoMeta[]>;
+  addPhoto(day: string, image: Blob): Promise<PhotoMeta>;
+  deletePhoto(id: string): Promise<void>;
+  photoBlob(id: string): Promise<Blob>;
 
   // Merges a whole dataset in one go (restore, Strong/Hevy import, moving
   // guest data into an account). Rows with an id already present replace

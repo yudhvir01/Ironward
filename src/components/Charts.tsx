@@ -27,9 +27,17 @@ export function LineChart({
     <svg viewBox={`0 0 ${w} ${height}`} className="w-full" role="img" aria-label={`Trend from ${format(points[0].value)} to ${format(last.value)}`}>
       <line x1={pad.l} x2={w - pad.r} y1={y(max)} y2={y(max)} stroke="var(--border)" strokeDasharray="3 4" />
       <line x1={pad.l} x2={w - pad.r} y1={y(min)} y2={y(min)} stroke="var(--border)" strokeDasharray="3 4" />
-      <path d={d} fill="none" stroke="var(--primary)" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" />
+      {/* The line and dots glide to new values instead of jumping. */}
+      <path d={d} fill="none" stroke="var(--primary)" strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" className="transition-[d] duration-500 ease-out motion-reduce:transition-none" />
       {points.map((p, i) => (
-        <circle key={i} cx={x(i)} cy={y(p.value)} r={i === points.length - 1 || i === bestIdx ? 4 : 2.5} fill="var(--primary)">
+        <circle
+          key={i}
+          cx={x(i)}
+          cy={y(p.value)}
+          r={i === points.length - 1 || i === bestIdx ? 4 : 2.5}
+          fill="var(--primary)"
+          className="transition-all duration-500 ease-out motion-reduce:transition-none"
+        >
           <title>
             {p.label}: {format(p.value)}
           </title>

@@ -1,7 +1,8 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { Program } from "../program";
 import type { BodyWeight, DailyLog, LogKind, Workout } from "../types";
-import type { Backend, ImportData } from "./types";
+import { deleteDevicePhoto, getDevicePhoto, listDevicePhotos, putDevicePhoto } from "../photos";
+import type { Backend, ImportData, PhotoMeta } from "./types";
 
 interface GuestDB extends DBSchema {
   workouts: { key: string; value: Workout };
@@ -65,6 +66,35 @@ export class GuestBackend implements Backend {
     const row: BodyWeight = { id: crypto.randomUUID(), day: input.day, kg: input.kg, created_at: new Date().toISOString() };
     await (await getGuestDB()).put("bodyweights", row);
     return row;
+  }
+
+  async setBodyWeight(row: BodyWeight): Promise<void> {
+    const db = await getGuestDB();
+    const tx = db.transaction("bodyweights", "readwrite");
+    const store = tx.objectStore("bodyweights");
+    for (const old of await store.getAll()) if (old.day === row.day && old.id !== row.id) await store.delete(old.id);
+    await store.put(row);
+    await tx.done;
+  }
+
+  async listPhotos(): Promise<PhotoMeta[]> {
+    return (await listDevicePhotos()).map(({ id, day }) => ({ id, day }));
+  }
+
+  async addPhoto(day: string, image: Blob): Promise<PhotoMeta> {
+    const photo = { id: crypto.randomUUID(), day, blob: image };
+    await putDevicePhoto(photo);
+    return { id: photo.id, day };
+  }
+
+  async deletePhoto(id: string): Promise<void> {
+    await deleteDevicePhoto(id);
+  }
+
+  async photoBlob(id: string): Promise<Blob> {
+    const photo = await getDevicePhoto(id);
+    if (!photo) throw new Error("That photo isn't on this device any more.");
+    return photo.blob;
   }
 
   async deleteBodyWeight(id: string): Promise<void> {

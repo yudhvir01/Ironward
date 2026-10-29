@@ -4,7 +4,8 @@ import { useRequiredBackend } from "../context/BackendProvider";
 import { loadProgramId, saveProgramId } from "../lib/local";
 import { findProgram, type Program } from "../lib/program";
 import { enqueue, isNetworkError, withPending } from "../lib/outbox";
-import type { LogKind, Workout } from "../lib/types";
+import type { BodyWeight, LogKind, Workout } from "../lib/types";
+import type { Backend, PhotoMeta } from "../lib/backend/types";
 
 export function useWorkouts() {
   const backend = useRequiredBackend();
@@ -54,21 +55,81 @@ export function useDeleteWorkout() {
   });
 }
 
-export function useAddBodyWeight() {
+// Weigh-ins update the list the moment they're entered and save in the
+// background; a failed save puts the list back the way it was.
+function useBodyWeightMutation<T>(run: (backend: Backend, input: T) => Promise<unknown>, apply: (list: BodyWeight[], input: T) => BodyWeight[]) {
   const backend = useRequiredBackend();
   const qc = useQueryClient();
+  const key = ["bodyweights", backend.kind];
   return useMutation({
-    mutationFn: (input: { day: string; kg: number }) => backend.addBodyWeight(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bodyweights"] }),
+    mutationFn: (input: T) => run(backend, input),
+    onMutate: async (input: T) => {
+      await qc.cancelQueries({ queryKey: key });
+      const before = qc.getQueryData<BodyWeight[]>(key);
+      qc.setQueryData<BodyWeight[]>(key, (list = []) =>
+        apply(list, input).sort((a, b) => b.day.localeCompare(a.day) || b.created_at.localeCompare(a.created_at)),
+      );
+      return { before };
+    },
+    onError: (_e, _input, ctx) => {
+      if (ctx?.before) qc.setQueryData(key, ctx.before);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["bodyweights"] }),
   });
 }
 
+export function useAddBodyWeight() {
+  return useBodyWeightMutation<{ day: string; kg: number }>(
+    (backend, input) => backend.addBodyWeight(input),
+    (list, input) => [...list, { id: `pending-${input.day}`, ...input, created_at: new Date().toISOString() }],
+  );
+}
+
+// The weigh-in for a day, replacing any already logged that day.
+export function useSetBodyWeight() {
+  return useBodyWeightMutation<{ day: string; kg: number }>(
+    (backend, input) => backend.setBodyWeight({ id: crypto.randomUUID(), ...input, created_at: new Date().toISOString() }),
+    (list, input) => [...list.filter((w) => w.day !== input.day), { id: `pending-${input.day}`, ...input, created_at: new Date().toISOString() }],
+  );
+}
+
 export function useDeleteBodyWeight() {
+  return useBodyWeightMutation<string>(
+    (backend, id) => backend.deleteBodyWeight(id),
+    (list, id) => list.filter((w) => w.id !== id),
+  );
+}
+
+export function usePhotos() {
+  const backend = useRequiredBackend();
+  return useQuery({ queryKey: ["photos", backend.kind], queryFn: () => backend.listPhotos() });
+}
+
+export function useAddPhoto() {
   const backend = useRequiredBackend();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => backend.deleteBodyWeight(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["bodyweights"] }),
+    mutationFn: ({ day, image }: { day: string; image: Blob }) => backend.addPhoto(day, image),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["photos"] }),
+  });
+}
+
+export function useDeletePhoto() {
+  const backend = useRequiredBackend();
+  const qc = useQueryClient();
+  const key = ["photos", backend.kind];
+  return useMutation({
+    mutationFn: (id: string) => backend.deletePhoto(id),
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: key });
+      const before = qc.getQueryData<PhotoMeta[]>(key);
+      qc.setQueryData<PhotoMeta[]>(key, (list = []) => list.filter((p) => p.id !== id));
+      return { before };
+    },
+    onError: (_e, _id, ctx) => {
+      if (ctx?.before) qc.setQueryData(key, ctx.before);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ["photos"] }),
   });
 }
 

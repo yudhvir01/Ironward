@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "builtAt": 1793293705734,
+  "builtAt": 1793293956200,
   "version": "0.1.0",
   "bundle": {
-    "url": "/updates/ironward-1793293705734.zip",
-    "checksum": "eefbfb5fd32165475c5ead943db6f535653a38ff5d9e83e3d9b90dfca660ae1d"
+    "url": "/updates/ironward-1793293956200.zip",
+    "checksum": "5ec152ab1a17b29d7ec3ce2095b3c33113d4c21700bc1ac6168349aa98628907"
   },
   "minNativeVersion": 1,
   "apk": {
@@ -13,5 +13,5 @@
     "url": "/downloads/ironward.apk",
     "sha256": "abd884b6d56d57301e5eb82629c9254f71b4ce7082f85eb371d1d5f1299fe7cb"
   },
-  "notes": "Body weight logging and chart; protein tracker removed; designed confirmations"
+  "notes": "Smooth weigh-ins; progress photos saved in Google Drive"
 }

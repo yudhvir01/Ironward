@@ -1,35 +1,78 @@
+import { useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useConfirm } from "./ConfirmDialog";
-import { useEffect, useMemo, useState } from "react";
-import { addPhoto, deletePhoto, listPhotos, type Photo } from "../lib/photos";
+import { useRequiredBackend } from "../context/BackendProvider";
+import { useAddPhoto, useDeletePhoto, usePhotos } from "../hooks/useData";
+import { moveDevicePhotosToDrive } from "../lib/photoSync";
+import { shrinkPhoto } from "../lib/photos";
 import { fmtDay, localDay } from "../lib/stats";
+import type { PhotoMeta } from "../lib/backend/types";
 
-// Progress photos: kept only on this phone, never uploaded. The first and
-// latest sit side by side, which is the comparison that matters.
+// Progress photos. Signed in with Google they're saved in the Ironward
+// folder in Drive, and deleting one here moves it to the Drive trash; a
+// guest's stay on the phone. The first and latest sit side by side, which
+// is the comparison that matters.
 export function PhotosCard() {
+  const backend = useRequiredBackend();
   const confirm = useConfirm();
-  const [photos, setPhotos] = useState<Photo[]>([]);
-  const [busy, setBusy] = useState(false);
-  const reload = () => void listPhotos().then(setPhotos).catch(() => setPhotos([]));
-  useEffect(reload, []);
+  const qc = useQueryClient();
+  const { data: photos = [], isLoading } = usePhotos();
+  const add = useAddPhoto();
+  const remove = useDeletePhoto();
+  const [leaving, setLeaving] = useState<Set<string>>(new Set());
+  const [note, setNote] = useState<string | null>(null);
+  const drive = backend.kind === "drive";
 
-  const urls = useMemo(() => new Map(photos.map((p) => [p.id, URL.createObjectURL(p.blob)])), [photos]);
-  useEffect(() => () => urls.forEach((u) => URL.revokeObjectURL(u)), [urls]);
+  // Anything still only on this phone goes up to Drive.
+  useEffect(() => {
+    if (!drive) return;
+    moveDevicePhotosToDrive(backend)
+      .then((n) => {
+        if (n) void qc.invalidateQueries({ queryKey: ["photos"] });
+      })
+      .catch(() => setNote("Some photos on this phone couldn't be moved to Drive yet. They'll try again next time."));
+  }, [backend, drive, qc]);
 
   const first = photos[0];
   const latest = photos.length > 1 ? photos[photos.length - 1] : null;
+
+  async function del(p: PhotoMeta) {
+    const ok = await confirm({
+      title: "Delete this photo?",
+      message: drive
+        ? `The photo from ${fmtDay(p.day)} moves to your Google Drive trash, where you can still restore it for 30 days.`
+        : `The photo from ${fmtDay(p.day)} will be removed from this phone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    });
+    if (!ok) return;
+    setLeaving((s) => new Set(s).add(p.id));
+    window.setTimeout(() => remove.mutate(p.id, { onError: () => setNote("Couldn't delete that photo. Try again.") }), 220);
+  }
+
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    setNote(null);
+    try {
+      await add.mutateAsync({ day: localDay(), image: await shrinkPhoto(file) });
+    } catch {
+      setNote(drive ? "Couldn't save the photo to Drive. Check your connection and try again." : "Couldn't save the photo.");
+    }
+  }
 
   return (
     <section className="card p-4">
       <div className="flex items-baseline justify-between">
         <p className="label">Progress photos</p>
-        <p className="text-[10px] font-semibold text-muted-foreground">🔒 Stays on this phone</p>
+        <p className="text-[10px] font-semibold text-muted-foreground">{drive ? "☁️ Saved in your Google Drive" : "🔒 Stays on this phone"}</p>
       </div>
+      {isLoading && <div className="mt-3 aspect-[3/2] animate-pulse rounded-2xl bg-muted" />}
       {first && (
         <div className="mt-3 grid grid-cols-2 gap-2">
           {[first, latest].map((p, i) =>
             p ? (
-              <figure key={p.id} className="relative">
-                <img src={urls.get(p.id)} alt={`Progress photo ${fmtDay(p.day)}`} className="aspect-[3/4] w-full rounded-2xl object-cover" />
+              <figure key={p.id} className="animate-in relative">
+                <PhotoImage id={p.id} alt={`Progress photo ${fmtDay(p.day)}`} className="aspect-[3/4] w-full rounded-2xl" />
                 <figcaption className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-bold text-white">
                   {i === 0 ? "First" : "Latest"} · {fmtDay(p.day, { day: "numeric", month: "short" })}
                 </figcaption>
@@ -42,43 +85,71 @@ export function PhotosCard() {
           )}
         </div>
       )}
-      {photos.length > 2 && (
-        <div className="-mx-4 mt-2 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none]">
+      {photos.length > 0 && (
+        <div className="-mx-4 mt-2 flex gap-1.5 overflow-x-auto px-4 pt-1 [scrollbar-width:none]">
           {photos.map((p) => (
-            <button
+            <div
               key={p.id}
-              className="relative shrink-0"
-              onClick={async () => (await confirm({ title: "Delete this photo?", message: `The progress photo from ${fmtDay(p.day)} will be removed from this device.`, confirmLabel: "Delete", tone: "danger" })) && void deletePhoto(p.id).then(reload)}
-              aria-label={`Delete photo from ${fmtDay(p.day)}`}
+              className={`animate-in relative shrink-0 transition-all duration-200 ease-out ${leaving.has(p.id) ? "w-0 scale-75 opacity-0" : "w-12"}`}
             >
-              <img src={urls.get(p.id)} alt="" className="h-16 w-12 rounded-lg object-cover" />
-            </button>
+              <PhotoImage id={p.id} alt="" className="h-16 w-12 rounded-lg" />
+              <button
+                onClick={() => void del(p)}
+                className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-[10px] text-white transition active:scale-90"
+                aria-label={`Delete photo from ${fmtDay(p.day)}`}
+              >
+                ✕
+              </button>
+            </div>
           ))}
         </div>
       )}
-      <label className="btn-ghost mt-3 w-full cursor-pointer">
-        {busy ? "Saving…" : "+ Add photo"}
+      <label className={`btn-ghost mt-3 w-full cursor-pointer ${add.isPending ? "pointer-events-none opacity-70" : ""}`}>
+        {add.isPending ? (drive ? "Uploading to Drive…" : "Saving…") : "+ Add photo"}
         <input
           type="file"
           accept="image/*"
           capture="user"
           hidden
-          onChange={async (e) => {
+          onChange={(e) => {
             const f = e.target.files?.[0];
             e.target.value = "";
-            if (!f) return;
-            setBusy(true);
-            await addPhoto(f, localDay()).catch(() => undefined);
-            setBusy(false);
-            reload();
+            void pick(f);
           }}
         />
       </label>
-      {photos.length === 2 && (
-        <button className="mt-2 w-full text-xs text-muted-foreground" onClick={async () => latest && (await confirm({ title: "Delete the latest photo?", message: "It will be removed from this device.", confirmLabel: "Delete", tone: "danger" })) && void deletePhoto(latest.id).then(reload)}>
-          Delete latest
-        </button>
-      )}
+      {note && <p className="animate-in mt-2 text-xs text-destructive">{note}</p>}
     </section>
+  );
+}
+
+// Loads a photo's image (from the device, or from Drive via the device's
+// cache) and fades it in.
+function PhotoImage({ id, alt, className }: { id: string; alt: string; className: string }) {
+  const backend = useRequiredBackend();
+  const [url, setUrl] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const made = useRef<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    backend
+      .photoBlob(id)
+      .then((blob) => {
+        if (!active) return;
+        made.current = URL.createObjectURL(blob);
+        setUrl(made.current);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      if (made.current) URL.revokeObjectURL(made.current);
+    };
+  }, [backend, id]);
+
+  return (
+    <div className={`overflow-hidden bg-muted ${className} ${loaded ? "" : "animate-pulse"}`}>
+      {url && <img src={url} alt={alt} onLoad={() => setLoaded(true)} className={`h-full w-full object-cover transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`} />}
+    </div>
   );
 }

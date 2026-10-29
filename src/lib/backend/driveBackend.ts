@@ -1,13 +1,20 @@
 import type { Program } from "../program";
 import type { BodyWeight, DailyLog, LogKind, Workout } from "../types";
-import { createDataFile, DriveConflictError, ensureAppFolder, getHeadRevision, loadDataFile, saveDataFile, trashFile } from "./driveClient";
+import { cachePhoto, getCachedPhoto, uncachePhoto } from "../photos";
+import { createDataFile, downloadBinaryFile, DriveConflictError, ensureAppFolder, getHeadRevision, loadDataFile, saveDataFile, trashFile, uploadBinaryFile } from "./driveClient";
 import type { GoogleDriveSession } from "./googleAuth";
-import type { Backend, ImportData } from "./types";
+import type { Backend, ImportData, PhotoMeta } from "./types";
 
 const DATA_VERSION = 1;
 // How long a read trusts what's in memory before asking Drive (one small
 // metadata request) whether another device has saved since.
 const FRESH_FOR_MS = 30_000;
+
+// A photo's image is its own file in the Ironward folder; the data file
+// only records which file holds which day's photo.
+interface DrivePhoto extends PhotoMeta {
+  fileId: string;
+}
 
 interface DriveData {
   version: number;
@@ -15,10 +22,11 @@ interface DriveData {
   bodyweights: BodyWeight[];
   plans: Program[];
   logs: DailyLog[];
+  photos: DrivePhoto[];
 }
 
 function emptyData(): DriveData {
-  return { version: DATA_VERSION, workouts: [], bodyweights: [], plans: [], logs: [] };
+  return { version: DATA_VERSION, workouts: [], bodyweights: [], plans: [], logs: [], photos: [] };
 }
 
 function parseData(content: string): DriveData {
@@ -30,6 +38,7 @@ function parseData(content: string): DriveData {
       bodyweights: parsed.bodyweights ?? [],
       plans: parsed.plans ?? [],
       logs: parsed.logs ?? [],
+      photos: parsed.photos ?? [],
     };
   } catch {
     throw new Error("Couldn't read your Ironward data file on Drive — it may have been edited outside the app.");
@@ -159,6 +168,47 @@ export class DriveBackend implements Backend {
     const row: BodyWeight = { id: crypto.randomUUID(), day: input.day, kg: input.kg, created_at: new Date().toISOString() };
     await this.change((d) => ({ ...d, bodyweights: [...d.bodyweights, row] }));
     return row;
+  }
+
+  setBodyWeight(row: BodyWeight): Promise<void> {
+    return this.change((d) => ({ ...d, bodyweights: [...d.bodyweights.filter((b) => b.day !== row.day && b.id !== row.id), row] }));
+  }
+
+  async listPhotos(): Promise<PhotoMeta[]> {
+    const data = await this.fresh();
+    return data.photos.map(({ id, day }) => ({ id, day })).sort((a, b) => a.day.localeCompare(b.day));
+  }
+
+  // Uploads the image first, then records it, so the data file never
+  // points at a photo that isn't there.
+  async addPhoto(day: string, image: Blob): Promise<PhotoMeta> {
+    await this.ensureLoaded();
+    const id = crypto.randomUUID();
+    const fileId = await uploadBinaryFile(this.session, this.folderId!, `photo-${day}-${id.slice(0, 8)}.jpg`, image.type || "image/jpeg", image);
+    await this.change((d) => ({ ...d, photos: [...d.photos, { id, day, fileId }] }));
+    await cachePhoto(id, image).catch(() => undefined);
+    return { id, day };
+  }
+
+  // Moves the image to the Drive trash (recoverable there for 30 days)
+  // and forgets it.
+  async deletePhoto(id: string): Promise<void> {
+    await this.ensureLoaded();
+    const photo = this.data.photos.find((p) => p.id === id);
+    if (photo) await trashFile(this.session, photo.fileId);
+    await this.change((d) => ({ ...d, photos: d.photos.filter((p) => p.id !== id) }));
+    await uncachePhoto(id).catch(() => undefined);
+  }
+
+  async photoBlob(id: string): Promise<Blob> {
+    const cached = await getCachedPhoto(id).catch(() => undefined);
+    if (cached) return cached;
+    const data = await this.fresh();
+    const photo = data.photos.find((p) => p.id === id);
+    if (!photo) throw new Error("That photo is no longer in your Drive.");
+    const blob = await downloadBinaryFile(this.session, photo.fileId);
+    await cachePhoto(id, blob).catch(() => undefined);
+    return blob;
   }
 
   deleteBodyWeight(id: string): Promise<void> {

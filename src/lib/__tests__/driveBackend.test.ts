@@ -48,7 +48,7 @@ function fakeDrive() {
     }
     if (path === "/upload/drive/v3/files" && method === "POST") {
       uploads.count++;
-      const body = String(init.body);
+      const body = init.body instanceof Blob ? await init.body.text() : String(init.body);
       const parts = body.split(/--[0-9a-f-]+/);
       const metadata = JSON.parse(parts[1].split("\r\n\r\n")[1]) as { name: string; parents: string[] };
       const content = parts[2].split("\r\n\r\n").slice(1).join("\r\n\r\n").replace(/\r\n$/, "");
@@ -149,6 +149,28 @@ describe("DriveBackend", () => {
     await phone.saveWorkout(workout("b", "2026-10-02"));
     vi.setSystemTime(Date.now() + 60_000);
     expect((await laptop.listWorkouts()).length).toBe(2);
+  });
+
+  it("keeps one weigh-in per day, replacing in a single upload", async () => {
+    const b = new DriveBackend(session);
+    await b.addBodyWeight({ day: "2026-10-29", kg: 80.4 });
+    const before = drive.uploads.count;
+    await b.setBodyWeight({ id: "new", day: "2026-10-29", kg: 80, created_at: "2026-10-29T09:00:00.000Z" });
+    expect(drive.uploads.count - before).toBe(1);
+    expect((await new DriveBackend(session).listBodyWeights()).map((w) => w.kg)).toEqual([80]);
+  });
+
+  it("saves photos as Drive files and trashes them on delete", async () => {
+    const b = new DriveBackend(session);
+    const photo = await b.addPhoto("2026-10-29", new Blob(["jpeg-bytes"], { type: "image/jpeg" }));
+    const file = [...drive.files.values()].find((f) => f.name.startsWith("photo-2026-10-29"));
+    expect(file?.trashed).toBe(false);
+    const other = new DriveBackend(session);
+    expect(await other.listPhotos()).toEqual([{ id: photo.id, day: "2026-10-29" }]);
+    expect(await (await other.photoBlob(photo.id)).text()).toBe("jpeg-bytes");
+    await other.deletePhoto(photo.id);
+    expect(file?.trashed).toBe(true);
+    expect(await new DriveBackend(session).listPhotos()).toEqual([]);
   });
 
   it("retries once with a fresh token when Drive answers 401", async () => {
